@@ -1,0 +1,18 @@
+import bpy
+
+# Obtener el objeto seleccionado
+selected_object = bpy.context.active_object
+X = 0
+Y = 0
+Z = 0
+
+# Definir las nuevas coordenadas del origen
+new_origin_location = (X, Y, Z)
+
+# Establecer las nuevas coordenadas del origen
+selected_object = new_origin_location
+
+# Actualizar la escena para que los cambios surtan efecto
+bpy.context.view_layer.update()
+
+bpy.bpy
