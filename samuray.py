@@ -27,33 +27,53 @@ class funcs():
         # set origin new coordinates 
         # selected_object.location = (location_X, location_Y, location_Z)
         # IN METERS
-        size_X = 2.150
-        size_Y = 2.095
-        size_Z = 1.250
+        
+        foam_size_X = 1.410
+        foam_size_Y = 0.980
+        foam_size_Z = 1.180/2
+
+        cnc_size_X = 2.150
+        cnc_size_Y = 2.095
+        cnc_size_Z = 1.250
         scale = 1
         dist_X_center = 1.137 #distance X from bootom to center
         
-        cnc_center_X = ((size_X/2)-dist_X_center)
-        cnc_center_Y = 0
+        cnc_center_X = ((cnc_size_X/2)-dist_X_center)
+        cnc_center_Y = cnc_size_Y/2
         cnc_center_Z = 0
         
         # give 3dcursor new coordinates for the primitive cube
-        bpy.context.scene.cursor.location =(0,0,size_Z/2)
+        bpy.context.scene.cursor.location =(0,0,cnc_size_Z/2)
         
         # create primitive cube as AreaCNC
         bpy.ops.mesh.primitive_cube_add(size=scale)
         AreaCNC = bpy.context.object        
-
-        # Escalar el cubo a las dimensiones deseadas
-        AreaCNC.dimensions = (size_X, size_Y, size_Z)
+        AreaCNC.dimensions = (cnc_size_X, cnc_size_Y, cnc_size_Z)
         bpy.ops.object.transform_apply(scale=True)
         
+        # change cursor location
         bpy.context.scene.cursor.location =(cnc_center_X,0,0)
         # set the origin on the current object to the 3dcursor location
         bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
         
-        # Mover el cubo al centro deseado
+        # move the cube AreaCNC
         AreaCNC.location = (location_X, location_Y, location_Z)
+
+        # create primitive cube as foamBlock
+        # change cursor location
+        bpy.context.scene.cursor.location =(0,0,0)
+        bpy.ops.mesh.primitive_cube_add(size=scale)
+        foamBlock = bpy.context.object        
+        foamBlock.dimensions = (foam_size_X, foam_size_Y, foam_size_Z)
+        bpy.ops.object.transform_apply(scale=True)
+
+        # change cursor location
+        bpy.context.scene.cursor.location =(0,0,-foam_size_Z/2)
+        # set the origin on the current object to the 3dcursor location
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+        
+        # move the cube foamBlock
+        foamBlock.location = (location_X, location_Y, location_Z)
         
         # set 3dcursor location back to the stored location
         bpy.context.scene.cursor.location = saved_location
