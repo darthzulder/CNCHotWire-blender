@@ -82,7 +82,7 @@ class funcs():
         # IN METERS
         n_blocks_x = math.ceil(dimensions_X/foam_size_X)
         n_blocks_y = math.ceil(dimensions_Y/foam_size_Y)
-        n_blocks_z = math.ceil(dimensions_Z+separation/foam_size_Z)
+        n_blocks_z = math.ceil((dimensions_Z+separation)/foam_size_Z)
                                           
         # create primitive cube as foamBlock
         # change cursor location
@@ -162,15 +162,15 @@ class funcs():
             original_collection.objects.unlink(block)
             blocks_collection.objects.link(block)
         # Agregar la colección "Blocks" a la escena
-        bpy.context.scene.collection.children.link(blocks_collection)
-        
+        bpy.context.scene.collection.children.link(blocks_collection)      
 
-    def create_cutter_planes (self, dimensions_X,dimensions_Y, dimensions_Z, separation_x = 1.43, separation_y = 1, plane_thickness = 0.02, scale = 1):
+    def create_cutter_planes (self, dimensions_X,dimensions_Y, dimensions_Z, separation_x = 1.43, separation_y = 1, separation_z = 1.180/2,  plane_thickness = 0.02, scale = 1):
         
         plane_size_high = (dimensions_Z+0.5)
 
         faces_count_x = math.ceil(dimensions_X/separation_x)+1 
         faces_count_y = math.ceil(dimensions_Y/separation_y)+1 
+        faces_count_z = math.ceil((dimensions_Z)/separation_z)-1
 
         dim_plane_x=math.ceil(dimensions_X/separation_x)*separation_x+0.5
         dim_plane_y=math.ceil(dimensions_Y/separation_y)*separation_y+0.5
@@ -183,51 +183,77 @@ class funcs():
         # change cursor location
         bpy.context.scene.cursor.location =(0,location_y,location_z)
         bpy.ops.mesh.primitive_plane_add(size=scale)
-        cutterPlane1 = bpy.context.object
-        cutterPlane1.name = "cutterPlane.001"
-        cutterPlane1.dimensions = (plane_size_high, dim_plane_y, 0)
-        cutterPlane1.rotation_euler = (0,math.radians(90),0)
+        cutterPlane_X = bpy.context.object
+        cutterPlane_X.name = "cutterPlane.001"
+        cutterPlane_X.dimensions = (plane_size_high, dim_plane_y, 0)
+        cutterPlane_X.rotation_euler = (0,math.radians(90),0)
         bpy.ops.object.transform_apply(scale=True)
 
         # Agregar el modificador Array
-        array_modifier1 = cutterPlane1.modifiers.new(name="Array_X", type='ARRAY')
+        array_modifier_X1 = cutterPlane_X.modifiers.new(name="Array_X", type='ARRAY')
         # Agregar el modificador Array
-        array_modifier2 = cutterPlane1.modifiers.new(name="Solidify_X", type='SOLIDIFY')
+        array_modifier_X2 = cutterPlane_X.modifiers.new(name="Solidify_X", type='SOLIDIFY')
 
         # Definir las propiedades del modificador
-        array_modifier1.count = faces_count_x  # Número de repeticiones
-        array_modifier1.relative_offset_displace = (1.0, 0.0, 0.0)  # Desplazamiento relativo
-        array_modifier1.use_constant_offset = True  # Usar desplazamiento constante
-        array_modifier1.constant_offset_displace = (separation_x*scale, 0.0, 0.0)  # Desplazamiento constante
+        array_modifier_X1.count = faces_count_x  # Número de repeticiones
+        array_modifier_X1.relative_offset_displace = (1.0, 0.0, 0.0)  # Desplazamiento relativo
+        array_modifier_X1.use_constant_offset = True  # Usar desplazamiento constante
+        array_modifier_X1.constant_offset_displace = (separation_x*scale, 0.0, 0.0)  # Desplazamiento constante
 
         # Definir las propiedades del modificador
-        array_modifier2.offset = 0
-        array_modifier2.thickness = plane_thickness
+        array_modifier_X2.offset = 0
+        array_modifier_X2.thickness = plane_thickness
 
         # -----create primitive Plane as cutterPlane --Cuts in Y--
         # change cursor location
         bpy.context.scene.cursor.location =(location_x,0,location_z)
         bpy.ops.mesh.primitive_plane_add(size=scale)
-        cutterPlane2 = bpy.context.object
-        cutterPlane2.name = "cutterPlane.002"
-        cutterPlane2.dimensions = (dim_plane_x, plane_size_high, 0)
-        cutterPlane2.rotation_euler = (math.radians(90),0,0)
+        cutterPlane_Y = bpy.context.object
+        cutterPlane_Y.name = "cutterPlane.002"
+        cutterPlane_Y.dimensions = (dim_plane_x, plane_size_high, 0)
+        cutterPlane_Y.rotation_euler = (math.radians(90),0,0)
         bpy.ops.object.transform_apply(scale=True)
 
         # Agregar el modificador Array
-        array_modifier3 = cutterPlane2.modifiers.new(name="Array_Y", type='ARRAY')
+        array_modifier_Y1 = cutterPlane_Y.modifiers.new(name="Array_Y", type='ARRAY')
         # Agregar el modificador Array
-        array_modifier4 = cutterPlane2.modifiers.new(name="Solidify_Y", type='SOLIDIFY')
+        array_modifier_Y2 = cutterPlane_Y.modifiers.new(name="Solidify_Y", type='SOLIDIFY')
 
         # Definir las propiedades del modificador
-        array_modifier3.count = faces_count_y  # Número de repeticiones
-        array_modifier3.relative_offset_displace = (0.0, 1.0, 0.0)  # Desplazamiento relativo
-        array_modifier3.use_constant_offset = True  # Usar desplazamiento constante
-        array_modifier3.constant_offset_displace = (0.0, separation_y*scale, 0.0)  # Desplazamiento constante
+        array_modifier_Y1.count = faces_count_y  # Número de repeticiones
+        array_modifier_Y1.relative_offset_displace = (0.0, 1.0, 0.0)  # Desplazamiento relativo
+        array_modifier_Y1.use_constant_offset = True  # Usar desplazamiento constante
+        array_modifier_Y1.constant_offset_displace = (0.0, separation_y*scale, 0.0)  # Desplazamiento constante
 
         # Definir las propiedades del modificador
-        array_modifier4.offset = 0
-        array_modifier4.thickness = plane_thickness
+        array_modifier_Y2.offset = 0
+        array_modifier_Y2.thickness = plane_thickness
+
+        # -----create primitive Plane as cutterPlane --Cuts in Z--
+        # change cursor location
+        bpy.context.scene.cursor.location =(location_x,location_y,separation_z+plane_thickness/2)
+        bpy.ops.mesh.primitive_plane_add(size=scale)
+        cutterPlane_Z = bpy.context.object
+        cutterPlane_Z.name = "cutterPlane.003"
+        cutterPlane_Z.dimensions = (dim_plane_x, dim_plane_y, 0)        
+        bpy.ops.object.transform_apply(scale=True)
+
+        # Agregar el modificador Array
+        array_modifier_Z1 = cutterPlane_Z.modifiers.new(name="Array_Y", type='ARRAY')
+        # Agregar el modificador Array
+        array_modifier_Z2 = cutterPlane_Z.modifiers.new(name="Solidify_Y", type='SOLIDIFY')
+
+        # Definir las propiedades del modificador
+        array_modifier_Z1.count = faces_count_z  # Número de repeticiones
+        array_modifier_Z1.relative_offset_displace = (0.0, 0.0, 1.0)  # Desplazamiento relativo
+        array_modifier_Z1.use_constant_offset = True  # Usar desplazamiento constante
+        array_modifier_Z1.constant_offset_displace = (0.0, 0.0, separation_z+plane_thickness/2)  # Desplazamiento constante
+
+        # Definir las propiedades del modificador
+        array_modifier_Z2.offset = 0
+        array_modifier_Z2.thickness = plane_thickness
+
+        return cutterPlane_X,cutterPlane_Y, cutterPlane_Z
 
     def crate_cnc_area (self,cnc_size_X = 2.150, cnc_size_Y = 2.095, cnc_size_Z = 1.250,scale = 1):
         print(f"-------crate_cnc_area>{dir}")
@@ -293,11 +319,23 @@ class funcs():
         dimensions_Y = dimensions.y
         dimensions_Z = dimensions.z   
 
-        self.create_cutter_planes(dimensions_X,dimensions_Y,dimensions_Z, scale = 1) 
+        cutterPlane1,cutterPlane2, cutterPlane3 = self.create_cutter_planes(dimensions_X,dimensions_Y,dimensions_Z, scale = 1) 
         
         self.create_block_greed(dimensions_X,dimensions_Y,dimensions_Z, scale = 1)
        
         bpy.ops.object.select_all(action='DESELECT')
+        selected_object.select_set(True)
+        
+        '''# Add boolean modifiers to cut the object
+        boolean_modifier1 = selected_object.modifiers.new(name="Cut_plane_X", type='BOOLEAN')
+        boolean_modifier1.solver = 'FAST'
+        boolean_modifier1.object = cutterPlane1
+        
+        boolean_modifier1 = selected_object.modifiers.new(name="Cut_plane_Y", type='BOOLEAN')
+        boolean_modifier1.solver = 'FAST'
+        boolean_modifier1.object = cutterPlane2'''
+
+        #-----Select the initial object
         selected_object.select_set(True)
         bpy.context.view_layer.objects.active = selected_object
         # change cursor location
@@ -314,7 +352,7 @@ class BUTTOM_CUSTOM01(bpy.types.Operator):
 
     def execute(self, context):
         funcion = funcs()
-        funcion.change_origin()
+        funcion.create_block_greed(2,1,1)
         
         print("execute button01 custom ok!")
 
