@@ -1,4 +1,5 @@
 import bpy
+import math
 #from . import funcs
 import os
 dir = os.path.dirname(bpy.data.filepath)
@@ -8,7 +9,7 @@ print(f"------->{dir}")
 #Funciones
 class funcs():
     
-    def change_origin ():
+    def change_origin (self):
         print(f"-------change_origin>{dir}")
         # store the location of current 3d cursor
         saved_location = bpy.context.scene.cursor.location.xyz   # returns a vector
@@ -24,8 +25,6 @@ class funcs():
         location_Y = coordinates.y
         location_Z = coordinates.z
         
-        # set origin new coordinates 
-        # selected_object.location = (location_X, location_Y, location_Z)
         # IN METERS
         
         foam_size_X = 1.410
@@ -78,14 +77,9 @@ class funcs():
         # set 3dcursor location back to the stored location
         bpy.context.scene.cursor.location = saved_location
 
-    def create_block_greed ():
+    def create_block_greed (self,foam_size_X = 1.410, foam_size_Y = 0.980, foam_size_Z = 1.180/2, separation = 0.02, scale = 1):
         print(f"-------create_block_greed>{dir}")
         # IN METERS
-        
-        foam_size_X = 1.410
-        foam_size_Y = 0.980
-        foam_size_Z = 1.180/2
-        scale = 1
                                           
         # create primitive cube as foamBlock
         # change cursor location
@@ -105,7 +99,10 @@ class funcs():
         bpy.context.scene.cursor.location =(0,0,0)
         # set the origin on the current object to the 3dcursor location
         bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-
+        
+        # Move the object
+        obj.location = (foam_size_X/2,foam_size_Y/2,0)
+        
         # Agregar el modificador Array
         array_modifier1 = obj.modifiers.new(name="Array", type='ARRAY')
         array_modifier2 = obj.modifiers.new(name="Array", type='ARRAY')
@@ -114,13 +111,13 @@ class funcs():
         array_modifier1.count = 4  # Número de repeticiones
         array_modifier1.relative_offset_displace = (0.0, 1.0, 0.0)  # Desplazamiento relativo
         array_modifier1.use_constant_offset = True  # Usar desplazamiento constante
-        array_modifier1.constant_offset_displace = (0.0, 0.02*scale, 0.0)  # Desplazamiento constante
+        array_modifier1.constant_offset_displace = (0.0, separation*scale, 0.0)  # Desplazamiento constante
 
         # Definir las propiedades del modificador
         array_modifier2.count = 5  # Número de repeticiones
         array_modifier2.relative_offset_displace = (1.0, 0.0, 0.0)  # Desplazamiento relativo
         array_modifier2.use_constant_offset = True  # Usar desplazamiento constante
-        array_modifier2.constant_offset_displace = (0.02*scale, 0.0, 0.0)  # Desplazamiento constante
+        array_modifier2.constant_offset_displace = (separation*scale, 0.0, 0.0)  # Desplazamiento constante
 
         # Aplicar el modificador
         bpy.ops.object.modifier_apply(modifier=array_modifier1.name)
@@ -155,6 +152,145 @@ class funcs():
         # Agregar la colección "Blocks" a la escena
         bpy.context.scene.collection.children.link(blocks_collection)
 
+    def create_cutter_planes (self, dimensions_X,dimensions_Y, separation_x = 1.43, separation_y = 1,plane_thickness = 0.02, scale = 1):
+        
+        plane_size_high = 1
+
+        faces_count_x = math.ceil(dimensions_X/separation_x)+1 
+        faces_count_y = math.ceil(dimensions_Y/separation_y)+1 
+
+        dim_plane_x=math.ceil(dimensions_X/separation_x)*separation_x+0.5
+        dim_plane_y=math.ceil(dimensions_Y/separation_y)*separation_y+0.5
+            
+        location_x = (dim_plane_x-0.5)/2
+        location_y = (dim_plane_y-0.5)/2
+        
+        # -----create primitive Plane as cutterPlane --Cuts in X--
+        # change cursor location
+        bpy.context.scene.cursor.location =(0,location_y,plane_size_high/2)
+        bpy.ops.mesh.primitive_plane_add(size=scale)
+        cutterPlane1 = bpy.context.object
+        cutterPlane1.name = "cutterPlane.001"
+        cutterPlane1.dimensions = (plane_size_high, dim_plane_y, 0)
+        cutterPlane1.rotation_euler = (0,math.radians(90),0)
+        bpy.ops.object.transform_apply(scale=True)
+
+        # Agregar el modificador Array
+        array_modifier1 = cutterPlane1.modifiers.new(name="Array", type='ARRAY')
+        # Agregar el modificador Array
+        array_modifier2 = cutterPlane1.modifiers.new(name="Solidify", type='SOLIDIFY')
+
+        # Definir las propiedades del modificador
+        array_modifier1.count = faces_count_x  # Número de repeticiones
+        array_modifier1.relative_offset_displace = (1.0, 0.0, 0.0)  # Desplazamiento relativo
+        array_modifier1.use_constant_offset = True  # Usar desplazamiento constante
+        array_modifier1.constant_offset_displace = (separation_x*scale, 0.0, 0.0)  # Desplazamiento constante
+
+        # Definir las propiedades del modificador
+        array_modifier2.offset = 0
+        array_modifier2.thickness = plane_thickness
+
+        # -----create primitive Plane as cutterPlane --Cuts in Y--
+        # change cursor location
+        bpy.context.scene.cursor.location =(location_x,0,plane_size_high/2)
+        bpy.ops.mesh.primitive_plane_add(size=scale)
+        cutterPlane2 = bpy.context.object
+        cutterPlane2.name = "cutterPlane.002"
+        cutterPlane2.dimensions = (dim_plane_x, plane_size_high, 0)
+        cutterPlane2.rotation_euler = (math.radians(90),0,0)
+        bpy.ops.object.transform_apply(scale=True)
+
+        # Agregar el modificador Array
+        array_modifier3 = cutterPlane2.modifiers.new(name="Array", type='ARRAY')
+        # Agregar el modificador Array
+        array_modifier4 = cutterPlane2.modifiers.new(name="Solidify", type='SOLIDIFY')
+
+        # Definir las propiedades del modificador
+        array_modifier3.count = faces_count_y  # Número de repeticiones
+        array_modifier3.relative_offset_displace = (0.0, 1.0, 0.0)  # Desplazamiento relativo
+        array_modifier3.use_constant_offset = True  # Usar desplazamiento constante
+        array_modifier3.constant_offset_displace = (0.0, separation_y*scale, 0.0)  # Desplazamiento constante
+
+        # Definir las propiedades del modificador
+        array_modifier4.offset = 0
+        array_modifier4.thickness = plane_thickness
+
+    def crate_cnc_area (self,cnc_size_X = 2.150, cnc_size_Y = 2.095, cnc_size_Z = 1.250,scale = 1):
+        print(f"-------crate_cnc_area>{dir}")
+        # store the location of current 3d cursor
+        saved_location = bpy.context.scene.cursor.location.xyz   # returns a vector
+        
+        
+        # get object
+        selected_object = bpy.context.active_object
+        # get object coordinates
+        coordinates = selected_object.location
+        
+        # get new origin coordinates
+        location_X = coordinates.x
+        location_Y = coordinates.y
+        location_Z = coordinates.z        
+        
+        dist_X_center = 1.137 #distance X from bootom to center
+        
+        cnc_center_X = ((cnc_size_X/2)-dist_X_center)
+        cnc_center_Y = cnc_size_Y/2
+        cnc_center_Z = 0
+        
+        # give 3dcursor new coordinates for the primitive cube
+        bpy.context.scene.cursor.location =(0,0,cnc_size_Z/2)
+        
+        # create primitive cube as AreaCNC
+        bpy.ops.mesh.primitive_cube_add(size=scale)
+        AreaCNC = bpy.context.object        
+        AreaCNC.dimensions = (cnc_size_X, cnc_size_Y, cnc_size_Z)
+        bpy.ops.object.transform_apply(scale=True)
+        
+        # change cursor location
+        bpy.context.scene.cursor.location =(cnc_center_X,0,0)
+        # set the origin on the current object to the 3dcursor location
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+        
+        # move the cube AreaCNC
+        AreaCNC.location = (location_X, location_Y, location_Z)
+              
+        # set 3dcursor location back to the stored location
+        bpy.context.scene.cursor.location = saved_location
+
+    def crate_around_object (self, scale = 1):
+        print(f"-------crate_around_object>{dir}")
+        # store the location of current 3d cursor
+        saved_location = bpy.context.scene.cursor.location.xyz   # returns a vector
+        
+        
+        # get object
+        selected_object = bpy.context.active_object
+        # get object coordinates
+        coordinates = selected_object.location
+        # get object dimensions
+        dimensions = selected_object.dimensions
+        
+        # get new origin coordinates
+        location_X = coordinates.x
+        location_Y = coordinates.y
+        location_Z = coordinates.z  
+        # get new origin coordinates
+        dimensions_X = dimensions.x
+        dimensions_Y = dimensions.y
+        dimensions_Z = dimensions.z   
+
+        self.create_cutter_planes(dimensions_X,dimensions_Y) 
+        
+        #self.create_block_greed()
+       
+        # change cursor location
+        bpy.context.scene.cursor.location =(0,0,0)
+        # set the origin on the current object to the 3dcursor location
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+              
+        # set 3dcursor location back to the stored location
+        bpy.context.scene.cursor.location = saved_location
+        
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
 class BUTTOM_CUSTOM01(bpy.types.Operator):
@@ -163,8 +299,8 @@ class BUTTOM_CUSTOM01(bpy.types.Operator):
     bl_options = {'UNDO'}
 
     def execute(self, context):
-
-        funcs.change_origin()
+        funcion = funcs()
+        funcion.change_origin()
         
         print("execute button01 custom ok!")
 
@@ -176,8 +312,9 @@ class BUTTOM_CUSTOM02(bpy.types.Operator):
     bl_options = {'UNDO'}
 
     def execute(self, context):
-
-        funcs.create_block_greed()
+        
+        funcion = funcs()
+        funcion.crate_around_object()
         
         print("execute button02 custom ok!")
 
