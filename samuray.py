@@ -1,5 +1,6 @@
 import bpy
 import math
+from mathutils import Vector
 #from . import funcs
 import os
 dir = os.path.dirname(bpy.data.filepath)
@@ -321,19 +322,10 @@ class funcs():
 
         cutterPlane1,cutterPlane2, cutterPlane3 = self.create_cutter_planes(dimensions_X,dimensions_Y,dimensions_Z, scale = 1) 
         
-        self.create_block_greed(dimensions_X,dimensions_Y,dimensions_Z, scale = 1)
+        #self.create_block_greed(dimensions_X,dimensions_Y,dimensions_Z, scale = 1)
        
         bpy.ops.object.select_all(action='DESELECT')
-        selected_object.select_set(True)
-        
-        '''# Add boolean modifiers to cut the object
-        boolean_modifier1 = selected_object.modifiers.new(name="Cut_plane_X", type='BOOLEAN')
-        boolean_modifier1.solver = 'FAST'
-        boolean_modifier1.object = cutterPlane1
-        
-        boolean_modifier1 = selected_object.modifiers.new(name="Cut_plane_Y", type='BOOLEAN')
-        boolean_modifier1.solver = 'FAST'
-        boolean_modifier1.object = cutterPlane2'''
+        selected_object.select_set(True)                
 
         #-----Select the initial object
         selected_object.select_set(True)
@@ -342,7 +334,133 @@ class funcs():
         bpy.context.scene.cursor.location =(0,0,0)              
         # set 3dcursor location back to the stored location
         bpy.context.scene.cursor.location = saved_location
+    
+    def cut_object(self):
+        selected_object = bpy.context.active_object
+        # get object dimensions
+        dimensions = selected_object.dimensions
+        # get new origin coordinates
+        dimensions_X = dimensions.x
+        dimensions_Y = dimensions.y
+        dimensions_Z = dimensions.z 
+
         
+
+        # Add boolean modifiers to cut the object
+        boolean_modifier_X = selected_object.modifiers.new(name="Cut_plane_X", type='BOOLEAN')
+        boolean_modifier_X.solver = 'FAST'
+        boolean_modifier_X.object = bpy.data.objects['cutterPlane.001']
+
+        boolean_modifier_Y = selected_object.modifiers.new(name="Cut_plane_Y", type='BOOLEAN')
+        boolean_modifier_Y.solver = 'FAST'
+        boolean_modifier_Y.object = bpy.data.objects['cutterPlane.002']
+
+        boolean_modifier_Z = selected_object.modifiers.new(name="Cut_plane_Z", type='BOOLEAN')
+        boolean_modifier_Z.solver = 'FAST'
+        boolean_modifier_Z.object = bpy.data.objects['cutterPlane.003']
+
+        bpy.ops.object.modifier_apply(modifier=boolean_modifier_X.name)
+        bpy.ops.object.modifier_apply(modifier=boolean_modifier_Y.name)
+        bpy.ops.object.modifier_apply(modifier=boolean_modifier_Z.name)
+
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.separate(type='LOOSE')
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        # Obtener las partes separadas
+        objectBlocks = bpy.context.selected_objects
+
+        # Crear una nueva colección llamada "Blocks"
+        cut_blocks_collection = bpy.data.collections.new("cut_Blocks")
+        
+        i=0
+        # Add parts to the collection "cut_Blocks"
+        for block in objectBlocks:
+            # set the origin on the current object to the ceter of mass location
+            bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS')
+            
+            # get object coordinates
+            coor_block = block.location            
+            # get new origin coordinates
+            block_location_X = coor_block.x
+            block_location_Y = coor_block.y
+            block_location_Z = coor_block.z
+            # change cursor location
+            bpy.context.scene.cursor.location = (block_location_X,block_location_Y,block_location_Z)
+            # set the origin on the current object to the 3dcursor location
+            bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+            original_collection = block.users_collection[0]
+            original_collection.objects.unlink(block)
+            cut_blocks_collection.objects.link(block)
+        # Agregar la colección "Blocks" a la escena
+        bpy.context.scene.collection.children.link(cut_blocks_collection) 
+
+        self.create_block_greed(dimensions_X,dimensions_Y,dimensions_Z, scale = 1)
+
+    def inner_part_verif(self):
+        
+        self.cut_object()
+        # Get a list of all cube objects and irregular objects in the scene
+        objects_cube     = [object for object in bpy.data.objects if object.name.startswith("foamBlock.")]
+        objects_irregular = [object for object in bpy.data.objects if object.name.startswith("islandBlock.")]
+        
+        # Dictionary to store the relationship between cube objects and irregular objects
+        relation_cube_irregular = {}
+
+            
+        for object_cube in objects_cube:
+            # # Get the world coordinates bounding-box-points of object_cube
+            bbox_cube = [['%.2f' % elem for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
+            
+            # Check if each irregular object is contained within any cube object
+            for object_irregular in objects_irregular:
+                # Get the world coordinates of the bounding-box-points of object_irregular
+                bbox_irregular = [ ['%.2f' % elem for elem in object_irregular.matrix_world @ Vector(coor)] for coor in object_irregular.bound_box]
+
+                # # Check if the bounding box of the irregular object is contained within the bounding box of the cube object
+                is_inside = all(
+                    bbox_cube[0][i] <= bbox_irregular[i][i] <= bbox_cube[6][i] and
+                    bbox_cube[0][i] <= bbox_irregular[7][i] <= bbox_cube[6][i]
+                    for i in range(3)
+                )
+                                
+                if is_inside:
+                    relation_cube_irregular[object_irregular.name] = object_cube.name
+                    break
+            
+            
+        for object_irregular, object_cube in relation_cube_irregular.items():
+            # Imprimir la relación entre los objetos cubo y objetos irregular
+            #print(f"The irregular object {object_irregular} is inside the cube object {object_cube}")
+            
+            object_irregular_obj = bpy.data.objects[object_irregular]
+            object_cubo_obj = bpy.data.objects[object_cube]   
+            collections_name = "Part"
+            
+            if not(object_cubo_obj.users_collection[0].name.startswith(f"{collections_name}.")):
+                # Create a new collection for the related objects
+                blocks_collection = bpy.data.collections.new(f"{collections_name}.000")
+
+                original_collection = object_cubo_obj.users_collection[0]
+                original_collection.objects.unlink(object_cubo_obj)
+                blocks_collection.objects.link(object_cubo_obj)            
+
+                original_collection = object_irregular_obj.users_collection[0]
+                original_collection.objects.unlink(object_irregular_obj)
+                blocks_collection.objects.link(object_irregular_obj)
+                
+                # Add the created collection to the scene
+                bpy.context.scene.collection.children.link(blocks_collection) 
+            else:
+                original_collection = object_irregular_obj.users_collection[0]
+                original_collection.objects.unlink(object_irregular_obj)
+                object_cubo_obj.users_collection[0].objects.link(object_irregular_obj)
+                
+
+              
+
+
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
 class BUTTOM_CUSTOM01(bpy.types.Operator):
@@ -352,7 +470,7 @@ class BUTTOM_CUSTOM01(bpy.types.Operator):
 
     def execute(self, context):
         funcion = funcs()
-        funcion.create_block_greed(2,1,1)
+        funcion.crate_around_object()
         
         print("execute button01 custom ok!")
 
@@ -366,7 +484,7 @@ class BUTTOM_CUSTOM02(bpy.types.Operator):
     def execute(self, context):
         
         funcion = funcs()
-        funcion.crate_around_object()
+        funcion.inner_part_verif()
         
         print("execute button02 custom ok!")
 
