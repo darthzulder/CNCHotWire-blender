@@ -412,7 +412,7 @@ class funcs():
         for object_cube in objects_cube:
             # # Get the world coordinates bounding-box-points of object_cube
             bbox_cube = [['%.2f' % elem for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
-            
+            have_something_inside = 0
             # Check if each irregular object is contained within any cube object
             for object_irregular in objects_irregular:
                 # Get the world coordinates of the bounding-box-points of object_irregular
@@ -427,12 +427,15 @@ class funcs():
                                 
                 if is_inside:
                     relation_cube_irregular[object_irregular.name] = object_cube.name
-                    break
-            
-            
-        for object_irregular, object_cube in relation_cube_irregular.items():
+                    have_something_inside = 1
+                    #break
+            #Delete cube if don't have nothing inside            
+            if have_something_inside == 0:
+                bpy.data.objects.remove(object_cube, do_unlink=True)
+        print(relation_cube_irregular)
+        for object_irregular, object_cube in (relation_cube_irregular.items()):
             # Imprimir la relación entre los objetos cubo y objetos irregular
-            #print(f"The irregular object {object_irregular} is inside the cube object {object_cube}")
+            print(f"The irregular object {object_irregular} is inside the cube object {object_cube}")
             
             object_irregular_obj = bpy.data.objects[object_irregular]
             object_cubo_obj = bpy.data.objects[object_cube]   
@@ -453,9 +456,11 @@ class funcs():
                 # Add the created collection to the scene
                 bpy.context.scene.collection.children.link(blocks_collection) 
             else:
+                #print(f"The irregular object {object_irregular} is inside the cube object {object_cube}")
                 original_collection = object_irregular_obj.users_collection[0]
                 original_collection.objects.unlink(object_irregular_obj)
                 object_cubo_obj.users_collection[0].objects.link(object_irregular_obj)
+                #bpy.context.scene.collection.children.link(blocks_collection)
                 
 
               
