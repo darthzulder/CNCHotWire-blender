@@ -383,8 +383,7 @@ class funcs():
         self.create_cutter_planes(dimensions_X,dimensions_Y,dimensions_Z, scale = 1) 
         self.create_woods(dimensions_X,dimensions_Y,dimensions_Z, scale = 1)
        
-        bpy.ops.object.select_all(action='DESELECT')
-        selected_object.select_set(True)                
+        bpy.ops.object.select_all(action='DESELECT')              
 
         #-----Select the initial object
         selected_object.select_set(True)
@@ -565,6 +564,57 @@ class funcs():
             # UnDo in case of error
             bpy.ops.ed.undo()
 
+    def gpencil_to_mesh(self):
+        context = bpy.context.copy()
+
+        for area in bpy.context.screen.areas:
+            if area.type == 'VIEW_3D':
+                for region in area.regions:
+                    if region.type == 'WINDOW':
+                        context['area'] = area
+                        context['region'] = region
+                        break
+                break
+
+        bpy.ops.gpencil.convert(context, type='CURVE', use_timing_data=True)
+        bpy.ops.object.convert(target='MESH')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        greacePencil = bpy.context.object
+        bpy.data.objects.remove(greacePencil, do_unlink=True)
+        foamcut = bpy.context.selected_objects[0]
+        foamcut.name = "foamCut.001"          
+
+        #-----Select the initial object
+        foamcut.select_set(True)
+        bpy.context.view_layer.objects.active = foamcut
+
+        verts=foamcut.data.vertices
+        #direction will be form +X  to -X        
+        f= open("e:\BLENDER.nc","w+")
+        if verts[0].co.x < verts[len(verts)-1].co.x:
+            for i in reversed(range(0,len(verts))):
+                coorX=str('%.4f' % verts[i].co.x)
+                coorY=str('%.4f' % verts[i].co.y)
+                coorZ=str('%.4f' % verts[i].co.z)
+                print(f'G01X{coorX}Y{coorZ}A{coorY}')
+                f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n')
+        else:
+            for i in range(0,len(verts)):
+                coorX=str('%.4f' % verts[i].co.x)
+                coorY=str('%.4f' % verts[i].co.y)
+                coorZ=str('%.4f' % verts[i].co.z)
+                print(f'G01X{coorX}Y{coorZ}A{coorY}')
+
+    def draw_init(self):
+
+        bpy.ops.object.gpencil_add(location=(0, 0, 0), type='EMPTY')        
+        
+        # rename grease pencil
+        bpy.context.scene.objects[-1].name = "lapiz"
+
+        # Get grease pencil object
+        gpencil = bpy.context.scene.objects['lapiz']
+        bpy.ops.object.mode_set(mode='PAINT_GPENCIL')
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
@@ -595,12 +645,40 @@ class BUTTOM_CUSTOM02(bpy.types.Operator):
 
         return {'FINISHED'}
     
+class BUTTOM_CUSTOM03(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM03_CutFoam"
+    bl_idname = "object.button_custom03"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        
+        funcion = funcs()
+        funcion.draw_init()
+        
+        print("execute button03 custom ok!")
+
+        return {'FINISHED'}
+    
+class BUTTOM_CUSTOM04(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM04_CutFoam"
+    bl_idname = "object.button_custom04"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        
+        funcion = funcs()
+        funcion.gpencil_to_mesh()
+        
+        print("execute button04 custom ok!")
+
+        return {'FINISHED'}
+    
 # PANEL UI (PART 1 DRAW)
 ####################################################
 
-class PANEL_CUSTOM_UI(bpy.types.Panel):
-    bl_label = "CNC Hot-Wire"
-    bl_idname = "OBJECT_PT_panel"
+class PANEL_CUSTOM_UI_01(bpy.types.Panel):
+    bl_label = "Prepare Irregular Model"
+    bl_idname = "OBJECT_PT_panel_01"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Panel Custom UI"
@@ -625,19 +703,54 @@ class PANEL_CUSTOM_UI(bpy.types.Panel):
         # add button custom
         row02 = layout.row()
         row02.scale_y = 2
-        row02.operator("object.button_custom02", text= "Make Cuts", icon = "MODIFIER_ON")
+        row02.operator("object.button_custom02", text= "Prepare Cuts in CNC Hot Wire", icon = "MODIFIER_ON")
+
+class PANEL_CUSTOM_UI_02(bpy.types.Panel):
+    bl_label = "CNC Hot-Wire"
+    bl_idname = "OBJECT_PT_panel_02"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Panel Custom UI"
+
+    def draw(self, context):
+        #variables
+        layout = self.layout
+
+        #create simple row
+        row01 = layout.row()
+        row01.label(text = "First Step")
+
+        # add button custom
+        row01 = layout.row()
+        row01.scale_y = 2
+        row01.operator("object.button_custom03", text= "Create Gpencil", icon = "MODIFIER_ON")
+
+        #create simple row
+        row01 = layout.row()
+        row01.label(text = "Second Step")
+
+        # add button custom
+        row01 = layout.row()
+        row01.scale_y = 2
+        row01.operator("object.button_custom04", text= "Gpencil to code", icon = "MODIFIER_ON")
 
 # REGISTER (PART 2)
 ####################################################
 def register():
-    bpy.utils.register_class(PANEL_CUSTOM_UI)
+    bpy.utils.register_class(PANEL_CUSTOM_UI_01)
+    bpy.utils.register_class(PANEL_CUSTOM_UI_02)
     bpy.utils.register_class(BUTTOM_CUSTOM01)
     bpy.utils.register_class(BUTTOM_CUSTOM02)
+    bpy.utils.register_class(BUTTOM_CUSTOM03)
+    bpy.utils.register_class(BUTTOM_CUSTOM04)
 
 def unregister():
-    bpy.utils.unregister_class(PANEL_CUSTOM_UI)
+    bpy.utils.unregister_class(PANEL_CUSTOM_UI_01)
+    bpy.utils.unregister_class(PANEL_CUSTOM_UI_02)
     bpy.utils.unregister_class(BUTTOM_CUSTOM01)
     bpy.utils.unregister_class(BUTTOM_CUSTOM02)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM03)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM04)
 
 if __name__ == "__main__":
     register()
