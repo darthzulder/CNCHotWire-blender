@@ -94,7 +94,7 @@ class funcs():
         foamBlock.dimensions = (foam_size_X, foam_size_Y, foam_size_Z)
         bpy.ops.object.transform_apply(scale=True)
 
-        # Obtener el objeto al que se le aplicará el modificador
+        # Get the object to apply the mod
         obj = bpy.context.object
         # Move the object
         obj.location = (separation/2,separation/2,foam_size_Z/2)
@@ -145,7 +145,7 @@ class funcs():
         # Crear una nueva colección llamada "Blocks"
         blocks_collection = bpy.data.collections.new("Blocks")
 
-        # Agregar las partes a la colección "Blocks"
+        # Add block to the collection "Blocks" and config location
         for block in foamBlocks:
             # set the origin on the current object to the ceter of mass location
             bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS')
@@ -159,6 +159,7 @@ class funcs():
             bpy.context.scene.cursor.location = (block_location_X,block_location_Y,block_location_Z-foam_size_Z/2)
             # set the origin on the current object to the 3dcursor location
             bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+            #change collection
             original_collection = block.users_collection[0]
             original_collection.objects.unlink(block)
             blocks_collection.objects.link(block)
@@ -530,6 +531,9 @@ class funcs():
                     areaCNC.lock_location = (True, True, True)
                     areaCNC.lock_scale = (True, True, True)
                     areaCNC.hide_select = True
+                    #make areaCNC and block just wire visible
+                    areaCNC.display_type = 'WIRE'
+                    object_cube_obj.display_type = 'WIRE'
 
                     # Create a new collection for the related objects
                     blocks_collection = bpy.data.collections.new(f"{collections_name}.000")
@@ -563,58 +567,131 @@ class funcs():
             print("Error Custon Function, UNDO:", e)
             # UnDo in case of error
             bpy.ops.ed.undo()
+    
+    def draw_init(self):
+        selected_object = bpy.context.active_object
+        rX, rY, rZ = selected_object.rotation_euler
+        print(selected_object.users_collection[0].name+'==>%.4f' % float(math.degrees(rZ)))
+
+        loc_x, loc_y, loc_z = selected_object.location
+
+        
+
+        #create gpencil and put in drawing mode
+        bpy.ops.object.gpencil_add(location=(loc_x, loc_y-selected_object.dimensions.y*1.5, loc_z), type='EMPTY')        
+        
+
+        #change to the actual collection
+        gpencil_selected = bpy.context.active_object
+        gpencil_coll=gpencil_selected.users_collection[0]
+        print(gpencil_coll.name)        
+        
+        gpencil_coll.objects.unlink(gpencil_selected)
+        selected_coll = selected_object.users_collection[0]
+        selected_coll.objects.link(gpencil_selected)
+
+        bpy.context.view_layer.objects.active = gpencil_selected
+        bpy.ops.object.mode_set(mode='PAINT_GPENCIL')
+                
+
+        #turn on the auto key
+        bpy.context.scene.tool_settings.use_keyframe_insert_auto = True
+
+        #change Viewport to Solid
+        for area in bpy.data.screens[3].areas: 
+            if area.type == 'VIEW_3D':
+                for space in area.spaces: 
+                    if space.type == 'VIEW_3D':
+                        space.shading.type = 'SOLID'
+                        bpy.ops.view3d.view_axis(type='FRONT')
 
     def gpencil_to_mesh(self):
-        context = bpy.context.copy()
+            context = bpy.context.copy()
 
-        for area in bpy.context.screen.areas:
-            if area.type == 'VIEW_3D':
-                for region in area.regions:
-                    if region.type == 'WINDOW':
-                        context['area'] = area
-                        context['region'] = region
-                        break
-                break
+            for area in bpy.context.screen.areas:
+                if area.type == 'VIEW_3D':
+                    for region in area.regions:
+                        if region.type == 'WINDOW':
+                            context['area'] = area
+                            context['region'] = region
+                            break
+                    break
 
-        bpy.ops.gpencil.convert(context, type='CURVE', use_timing_data=True)
-        bpy.ops.object.convert(target='MESH')
-        bpy.ops.object.mode_set(mode='OBJECT')
-        greacePencil = bpy.context.object
-        bpy.data.objects.remove(greacePencil, do_unlink=True)
-        foamcut = bpy.context.selected_objects[0]
-        foamcut.name = "foamCut.001"          
+            bpy.ops.gpencil.convert(context, type='CURVE', use_timing_data=True)
+            bpy.ops.object.convert(target='MESH')
+            bpy.ops.object.mode_set(mode='OBJECT')
+            greacePencil = bpy.context.object
 
-        #-----Select the initial object
-        foamcut.select_set(True)
-        bpy.context.view_layer.objects.active = foamcut
+            foamcut_gpencil = bpy.context.selected_objects[0]
+            foamcut_gpencil.name = "foamCut.001"  
 
-        verts=foamcut.data.vertices
-        #direction will be form +X  to -X        
-        f= open("e:\BLENDER.nc","w+")
-        if verts[0].co.x < verts[len(verts)-1].co.x:
-            for i in reversed(range(0,len(verts))):
-                coorX=str('%.4f' % verts[i].co.x)
-                coorY=str('%.4f' % verts[i].co.y)
-                coorZ=str('%.4f' % verts[i].co.z)
-                print(f'G01X{coorX}Y{coorZ}A{coorY}')
-                f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n')
-        else:
-            for i in range(0,len(verts)):
-                coorX=str('%.4f' % verts[i].co.x)
-                coorY=str('%.4f' % verts[i].co.y)
-                coorZ=str('%.4f' % verts[i].co.z)
-                print(f'G01X{coorX}Y{coorZ}A{coorY}')
+            #change to the actual collection
+            bpy.context.view_layer.objects.active = foamcut_gpencil
+            gpencil_selected = bpy.context.active_object
+            gpencil_coll=gpencil_selected.users_collection[0]
+            #print(gpencil_coll.name)        
+            
+            gpencil_coll.objects.unlink(gpencil_selected)
+            selected_coll = greacePencil.users_collection[0]
+            selected_coll.objects.link(gpencil_selected)  
 
-    def draw_init(self):
+            #delete original gpencil curve
+            bpy.data.objects.remove(greacePencil, do_unlink=True)            
 
-        bpy.ops.object.gpencil_add(location=(0, 0, 0), type='EMPTY')        
+            #-----Select the initial object
+            foamcut_gpencil.select_set(True)
+            bpy.context.view_layer.objects.active = foamcut_gpencil
+
+            verts=foamcut_gpencil.data.vertices
+            #create .nc file       
+            f= open("e:\BLENDER.nc","w+")
+            #direction will be form +X  to -X 
+            if verts[0].co.x < verts[len(verts)-1].co.x:
+                for i in reversed(range(0,len(verts))):
+                    coorX=str('%.4f' % verts[i].co.x)
+                    coorY=str('%.4f' % verts[i].co.y)
+                    coorZ=str('%.4f' % verts[i].co.z)
+                    #write in .nc file
+                    f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n')
+            else:
+                for i in range(0,len(verts)):
+                    coorX=str('%.4f' % verts[i].co.x)
+                    coorY=str('%.4f' % verts[i].co.y)
+                    coorZ=str('%.4f' % verts[i].co.z)
+                    #write in .nc file
+                    f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n')
+                    
+            #cut the foam with the actual object
+            self.cut_foam()
+
+            foamcut_gpencil.hide_select =  True
+            bpy.context.scene.tool_settings.use_keyframe_insert_auto = False        
+
+            #change Viewport to Wireframe
+            for area in bpy.data.screens[3].areas: 
+                if area.type == 'VIEW_3D':
+                    for space in area.spaces: 
+                        if space.type == 'VIEW_3D':
+                            space.shading.type = 'WIREFRAME'
+
+    def cut_foam(self):
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action = 'SELECT')
+        bpy.ops.mesh.extrude_region_move(TRANSFORM_OT_translate={"value":(0, 3, 0)})
+
+        '''#--create bool to cut the foamBlock with gpencil mesh
+        #print(selected_object.users_collection[0].name+'==>%.4f' % float(math.degrees(rZ)))
+        for child in selected_object.children:
+            if child.type != 'MESH':
+                continue
+            selected_object = bpy.context.object
+            boolean_modifier_Z = child.modifiers.new(name="Cut_foam_001", type='BOOLEAN')
+            boolean_modifier_Z.solver = 'EXACT'
+            boolean_modifier_Z.object = foamcut_gpencil
+            objects_cube      = [object for object in bpy.data.objects if object.name.startswith(f"{cubes_name}.")]
+        #bpy.ops.object.modifier_apply(modifier=boolean_modifier_Z.name)'''
+
         
-        # rename grease pencil
-        bpy.context.scene.objects[-1].name = "lapiz"
-
-        # Get grease pencil object
-        gpencil = bpy.context.scene.objects['lapiz']
-        bpy.ops.object.mode_set(mode='PAINT_GPENCIL')
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
