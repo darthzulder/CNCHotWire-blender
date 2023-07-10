@@ -136,13 +136,13 @@ class funcs():
         bpy.ops.object.modifier_apply(modifier=array_modifier2.name)
 
         
-        # ------------------Separar por partes sueltas-------------------------
+        # ------------------Separate by loose parts-------------------------
         bpy.ops.mesh.separate(type='LOOSE')
 
-        # Obtener las partes separadas
+        # Get divided parts
         foamBlocks = bpy.context.selected_objects
 
-        # Crear una nueva colección llamada "Blocks"
+        # Create a new collection "Blocks"
         blocks_collection = bpy.data.collections.new("Blocks")
 
         # Add block to the collection "Blocks" and config location
@@ -458,6 +458,7 @@ class funcs():
         self.create_block_greed(dimensions_X,dimensions_Y,dimensions_Z, scale = 1)
 
     def inner_part_verif(self):
+        print('******inner_part_verif***********')
         #save state in case of error
         bpy.ops.ed.undo_push(message="inner_part_verif Function")
         try:
@@ -488,14 +489,17 @@ class funcs():
 
                     # # Check if the bounding box of the irregular object is contained within the bounding box of the cube object
                     is_inside = all(
-                        bbox_cube[0][i] <= bbox_irregular[i][i] <= bbox_cube[6][i] and
-                        bbox_cube[0][i] <= bbox_irregular[7][i] <= bbox_cube[6][i]
+                        bbox_cube[0][i] <= bbox_irregular[0][i] <= bbox_cube[6][i] and
+                        bbox_cube[0][i] <= bbox_irregular[6][i] <= bbox_cube[6][i]
                         for i in range(3)
-                    )
+                    )                    
                                     
                     if is_inside:
                         relation_cube_irregular[object_irregular.name] = object_cube.name
                         have_something_inside = 1
+                        for i in range (3):                        
+                            print(f'c0|{i}:{bbox_cube[0][i]} <= i{i}|{i}:{bbox_irregular[i][i]} <= c6|{i}:{bbox_cube[6][i]}//c0|{i}:{bbox_cube[0][i]} <= i7|{i}:{bbox_irregular[7][i]} <= c6|{i}:{bbox_cube[6][i]}')
+                        print('=========')
                         #break
                 #Delete cube if don't have nothing inside            
                 if have_something_inside == 0:
@@ -621,30 +625,31 @@ class funcs():
             bpy.ops.object.convert(target='MESH')
             bpy.ops.object.mode_set(mode='OBJECT')
             greacePencil = bpy.context.object
-
-            foamcut_gpencil = bpy.context.selected_objects[0]
-            foamcut_gpencil.name = "foamCut.001"  
-
-            #change to the actual collection
-            bpy.context.view_layer.objects.active = foamcut_gpencil
-            gpencil_selected = bpy.context.active_object
-            gpencil_coll=gpencil_selected.users_collection[0]
-            #print(gpencil_coll.name)        
             
-            gpencil_coll.objects.unlink(gpencil_selected)
-            selected_coll = greacePencil.users_collection[0]
-            selected_coll.objects.link(gpencil_selected)  
+            selected_coll = greacePencil.users_collection[0]             
 
             #delete original gpencil curve
-            bpy.data.objects.remove(greacePencil, do_unlink=True)            
+            bpy.data.objects.remove(greacePencil, do_unlink=True)             
+            foamcut_gpencil_curve = bpy.context.selected_objects[0]           
+
+            #change to the actual collection
+            bpy.context.view_layer.objects.active = foamcut_gpencil_curve
+            gpencil_selected = bpy.context.active_object
+            gpencil_coll=gpencil_selected.users_collection[0]
+            print(f'*-*{gpencil_coll.name}')        
+            
+            gpencil_coll.objects.unlink(gpencil_selected)
+            selected_coll.objects.link(gpencil_selected)  
 
             #-----Select the initial object
-            foamcut_gpencil.select_set(True)
-            bpy.context.view_layer.objects.active = foamcut_gpencil
+            foamcut_gpencil_curve.select_set(True)
+            bpy.context.view_layer.objects.active = foamcut_gpencil_curve
+            
+            
+            verts = foamcut_gpencil_curve.data.vertices
 
-            verts=foamcut_gpencil.data.vertices
             #create .nc file       
-            f= open("e:\BLENDER.nc","w+")
+            f = open("e:\BLENDER.nc","w+")
             #direction will be form +X  to -X 
             if verts[0].co.x < verts[len(verts)-1].co.x:
                 for i in reversed(range(0,len(verts))):
@@ -659,12 +664,12 @@ class funcs():
                     coorY=str('%.4f' % verts[i].co.y)
                     coorZ=str('%.4f' % verts[i].co.z)
                     #write in .nc file
-                    f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n')
-                    
+                    f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n')   
+                        
             #cut the foam with the actual object
-            self.cut_foam()
+            self.cut_foam()    
 
-            foamcut_gpencil.hide_select =  True
+            foamcut_gpencil_curve.hide_select =  True
             bpy.context.scene.tool_settings.use_keyframe_insert_auto = False        
 
             #change Viewport to Wireframe
@@ -674,22 +679,75 @@ class funcs():
                         if space.type == 'VIEW_3D':
                             space.shading.type = 'WIREFRAME'
 
+            
+
     def cut_foam(self):
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action = 'SELECT')
         bpy.ops.mesh.extrude_region_move(TRANSFORM_OT_translate={"value":(0, 3, 0)})
+        bpy.ops.object.mode_set(mode='OBJECT')        
 
-        '''#--create bool to cut the foamBlock with gpencil mesh
-        #print(selected_object.users_collection[0].name+'==>%.4f' % float(math.degrees(rZ)))
-        for child in selected_object.children:
-            if child.type != 'MESH':
-                continue
-            selected_object = bpy.context.object
-            boolean_modifier_Z = child.modifiers.new(name="Cut_foam_001", type='BOOLEAN')
-            boolean_modifier_Z.solver = 'EXACT'
-            boolean_modifier_Z.object = foamcut_gpencil
-            objects_cube      = [object for object in bpy.data.objects if object.name.startswith(f"{cubes_name}.")]
-        #bpy.ops.object.modifier_apply(modifier=boolean_modifier_Z.name)'''
+        #identify and choose collection union
+        gpencil_obj = bpy.context.active_object
+        gpencil_coll = gpencil_obj.users_collection[0]
+        col = bpy.data.collections[gpencil_coll.name]
+
+        #--create solidfy to cut the foamBlock with gpencil mesh
+        solidfy_modifier_Z = gpencil_obj.modifiers.new(name="solid_001", type='SOLIDIFY')
+        solidfy_modifier_Z.thickness = 0.0001
+        bpy.ops.object.modifier_apply(modifier=solidfy_modifier_Z.name)
+
+        # create a list requiring both objects selected and in chosen collection
+        objects_cube = [object for object in col.objects if object.name.startswith(f"foamBlock.")]
+
+        print('---'+objects_cube[0].name+'--------------------------------------------')
+
+        #--create bool to cut the foamBlock with gpencil mesh
+        gpencil_obj.select_set(False) # deselect to evade errors
+        bpy.context.view_layer.objects.active = objects_cube[0]
+        boolean_modifier_Z = objects_cube[0].modifiers.new(name="Cut_foam_001", type='BOOLEAN')
+        boolean_modifier_Z.solver = 'EXACT'
+        boolean_modifier_Z.object = gpencil_obj
+        bpy.ops.object.modifier_apply(modifier=boolean_modifier_Z.name)
+
+        # ------------------Separate by loose parts-------------------------
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action = 'SELECT')
+        bpy.ops.mesh.separate(type='LOOSE')
+        bpy.ops.object.mode_set(mode='OBJECT') 
+
+        # Get divided parts
+        
+        # create a list requiring both objects
+        objects_cubes = [object for object in col.objects if object.name.startswith(f"foamBlock.")]
+        objects_irreg = [object for object in col.objects if object.name.startswith(f"irregObjPart.")]
+        
+        #print(objects_irreg)
+
+        for object_cube in objects_cubes:
+                # # Get the world coordinates bounding-box-points of object_cube
+                bbox_cube = [[float(math.ceil(elem * 100) / 100)  for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
+                have_something_inside = 0
+                #print(f'Coordenadas de {object_cube.name}: {bbox_cube}')
+                # Check if each irregular object is contained within any cube object
+                for object_irregular in objects_irreg:
+                    # Get the world coordinates of the bounding-box-points of object_irregular
+                    bbox_irregular = [ [float(math.ceil(elem * 100) / 100) for elem in object_irregular.matrix_world @ Vector(coor)] for coor in object_irregular.bound_box]
+
+                    # # Check if the bounding box of the irregular object is contained within the bounding box of the cube object
+                    is_inside = all(
+                        bbox_cube[0][i] <= bbox_irregular[0][i] <= bbox_cube[6][i] and
+                        bbox_cube[0][i] <= bbox_irregular[6][i] <= bbox_cube[6][i]
+                        for i in range(3)
+                    )                    
+                                    
+                    if is_inside:
+                        have_something_inside = 1
+
+                #Delete cube if don't have nothing inside            
+                if have_something_inside == 0:
+                    bpy.data.objects.remove(object_cube, do_unlink=True)
+
 
         
 
