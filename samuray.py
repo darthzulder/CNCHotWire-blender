@@ -665,11 +665,12 @@ class funcs():
                     coorZ=str('%.4f' % verts[i].co.z)
                     #write in .nc file
                     f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n')   
-                        
+
             #cut the foam with the actual object
             self.cut_foam()    
 
-            foamcut_gpencil_curve.hide_select =  True
+            #hide gpencil
+            #foamcut_gpencil_curve.hide_select =  True
             bpy.context.scene.tool_settings.use_keyframe_insert_auto = False        
 
             #change Viewport to Wireframe
@@ -677,9 +678,7 @@ class funcs():
                 if area.type == 'VIEW_3D':
                     for space in area.spaces: 
                         if space.type == 'VIEW_3D':
-                            space.shading.type = 'WIREFRAME'
-
-            
+                            space.shading.type = 'WIREFRAME'          
 
     def cut_foam(self):
         bpy.ops.object.mode_set(mode='EDIT')
@@ -698,58 +697,121 @@ class funcs():
         bpy.ops.object.modifier_apply(modifier=solidfy_modifier_Z.name)
 
         # create a list requiring both objects selected and in chosen collection
-        objects_cube = [object for object in col.objects if object.name.startswith(f"foamBlock.")]
+        objects_cube = [object for object in col.objects if object.name.startswith(f"foamBlock.")]        
+        objects_irreg = [object for object in col.objects if object.name.startswith(f"irregObjPart.")]
 
         print('---'+objects_cube[0].name+'--------------------------------------------')
 
         #--create bool to cut the foamBlock with gpencil mesh
+        #hide gpencil
+        gpencil_obj.hide_select =  True
         gpencil_obj.select_set(False) # deselect to evade errors
         bpy.context.view_layer.objects.active = objects_cube[0]
         boolean_modifier_Z = objects_cube[0].modifiers.new(name="Cut_foam_001", type='BOOLEAN')
         boolean_modifier_Z.solver = 'EXACT'
         boolean_modifier_Z.object = gpencil_obj
         bpy.ops.object.modifier_apply(modifier=boolean_modifier_Z.name)
+        
+        
+        #bpy.data.objects.remove(gpencil_obj, do_unlink=True)
 
         # ------------------Separate by loose parts-------------------------
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action = 'SELECT')
         bpy.ops.mesh.separate(type='LOOSE')
         bpy.ops.object.mode_set(mode='OBJECT') 
-
+        
+        #rest Z rotation to get real bound_box coord
+        rotation_irregObj = objects_irreg[0].rotation_euler.copy()
+        
+        #objects_irreg[0].rotation_euler.z = math.radians(0)
         # Get divided parts
         
         # create a list requiring both objects
         objects_cubes = [object for object in col.objects if object.name.startswith(f"foamBlock.")]
-        objects_irreg = [object for object in col.objects if object.name.startswith(f"irregObjPart.")]
         
-        #print(objects_irreg)
-
+        for object_irregular in objects_irreg:              
+                object_irregular.rotation_euler.z = math.radians(0)
         for object_cube in objects_cubes:
-                # # Get the world coordinates bounding-box-points of object_cube
-                bbox_cube = [[float(math.ceil(elem * 100) / 100)  for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
-                have_something_inside = 0
-                #print(f'Coordenadas de {object_cube.name}: {bbox_cube}')
-                # Check if each irregular object is contained within any cube object
-                for object_irregular in objects_irreg:
-                    # Get the world coordinates of the bounding-box-points of object_irregular
-                    bbox_irregular = [ [float(math.ceil(elem * 100) / 100) for elem in object_irregular.matrix_world @ Vector(coor)] for coor in object_irregular.bound_box]
+                object_cube.rotation_euler.z = math.radians(0)
 
+        #print(objects_irreg)
+        adjust_value = 0.01
+        for object_irregular in objects_irreg:
+                # Get the world coordinates of the bounding-box-points of object_irregular                
+                #object_irregular.rotation_euler.z = math.radians(0)
+                bbox_irregular = [ [float(math.ceil(elem * 100) / 100) for elem in object_irregular.matrix_world @ Vector(coor)] for coor in object_irregular.bound_box]
+                bpy.ops.object.select_all(action='DESELECT')                                    
+                
+                print(f'R: {object_irregular.rotation_euler.z} Coordenadas de {object_irregular.name}: {bbox_irregular}')
+                # Check if each irregular object is contained within any cube object
+                for object_cube in objects_cubes:
+                    have_something_inside = 0
+                    #object_cube.rotation_euler.z = math.radians(0)
+                    object_cube.select_set(True)
+                    # # Get the world coordinates bounding-box-points of object_cube
+                    bbox_cube = [[float(math.ceil(elem * 100) / 100)  for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
                     # # Check if the bounding box of the irregular object is contained within the bounding box of the cube object
+                    #bpy.ops.object.transform_apply(rotation=True)
+                    print(f'Coordenadas de {object_cube.name}: {bbox_cube}')
                     is_inside = all(
-                        bbox_cube[0][i] <= bbox_irregular[0][i] <= bbox_cube[6][i] and
-                        bbox_cube[0][i] <= bbox_irregular[6][i] <= bbox_cube[6][i]
+                        (bbox_cube[0][i]-adjust_value) <= bbox_irregular[0][i] <= (bbox_cube[6][i]+adjust_value) and
+                        (bbox_cube[0][i]-adjust_value) <= bbox_irregular[6][i] <= (bbox_cube[6][i]+adjust_value)
                         for i in range(3)
-                    )                    
+                    )
                                     
                     if is_inside:
                         have_something_inside = 1
-
+                    
+                    for i in range(3):
+                        print(f'R: {object_cube.rotation_euler.z} dentro?: {have_something_inside} | {bbox_cube[0][i]-adjust_value} <= {bbox_irregular[0][i]} <= {bbox_cube[6][i]+adjust_value} and {bbox_cube[0][i]-adjust_value} <= {bbox_irregular[6][i]} <= {bbox_cube[6][i]+adjust_value}')
+                        print(f'R: {object_cube.rotation_euler.z} dentro?: {bbox_cube[0][i]-adjust_value <= bbox_irregular[0][i] <= bbox_cube[6][i]+adjust_value and bbox_cube[0][i]-adjust_value <= bbox_irregular[6][i] <= bbox_cube[6][i]+adjust_value}')
+                    bpy.ops.object.select_all(action='DESELECT')
+                print(f'R2: {object_irregular.rotation_euler.z} Coordenadas de {object_irregular.name}: {bbox_irregular}')
                 #Delete cube if don't have nothing inside            
-                if have_something_inside == 0:
-                    bpy.data.objects.remove(object_cube, do_unlink=True)
-
+                #if have_something_inside == 0:
+                #    bpy.data.objects.remove(object_cube, do_unlink=True)
 
         
+        #-------------------------------PATCH SOLUTION - MUST FIX LATER------------------------------------------
+        
+        foamcoll = bpy.data.collections['Collection.001']
+        objects_cubes = [object for object in foamcoll.objects if object.name.startswith(f"foamBlock.")]
+        #objects_irreg = [object for object in foamcoll.objects if object.name.startswith(f"irregObjPart.")]
+        for object_cube in objects_cubes:
+            # # Get the world coordinates bounding-box-points of object_cube
+            bbox_cube = [[float(math.ceil(elem * 100) / 100)  for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
+            bbox_irreg = [[float(math.ceil(elem * 100) / 100)  for elem in objects_irreg[0].matrix_world @ Vector(coor)] for coor in objects_irreg[0].bound_box]
+            print(f'*****--Coordenadas de {object_cube.name}: {bbox_cube}')  
+            print(f'*****--Coordenadas de {objects_irreg[0].name}: {bbox_irreg}')    
+            have_something_inside = 0
+            #object_cube.rotation_euler.z = math.radians(0)
+            object_cube.select_set(True)
+            # # Get the world coordinates bounding-box-points of object_cube
+            bbox_cube = [[float(math.ceil(elem * 100) / 100)  for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
+            # # Check if the bounding box of the irregular object is contained within the bounding box of the cube object
+            #bpy.ops.object.transform_apply(rotation=True)
+            print(f'Coordenadas de {object_cube.name}: {bbox_cube}')
+            is_inside = all(
+                (bbox_cube[0][i]-adjust_value) <= bbox_irreg[0][i] <= (bbox_cube[6][i]+adjust_value) and
+                (bbox_cube[0][i]-adjust_value) <= bbox_irreg[6][i] <= (bbox_cube[6][i]+adjust_value)
+                for i in range(3)
+            )
+                            
+            if is_inside:
+                have_something_inside = 1
+            
+            for i in range(3):
+                print(f'R: {object_cube.rotation_euler.z} dentro?: {have_something_inside} | {bbox_cube[0][i]-adjust_value} <= {bbox_irreg[0][i]} <= {bbox_cube[6][i]+adjust_value} and {bbox_cube[0][i]-adjust_value} <= {bbox_irreg[6][i]} <= {bbox_cube[6][i]+adjust_value}')
+                print(f'R: {object_cube.rotation_euler.z} dentro?: {bbox_cube[0][i]-adjust_value <= bbox_irreg[0][i] <= bbox_cube[6][i]+adjust_value and bbox_cube[0][i]-adjust_value <= bbox_irreg[6][i] <= bbox_cube[6][i]+adjust_value}')
+            bpy.ops.object.select_all(action='DESELECT')  
+            #Delete cube if don't have nothing inside
+            if have_something_inside == 0:
+                    bpy.data.objects.remove(object_cube, do_unlink=True)
+        #-------------------------------END PATCH SOLUTION - MUST FIX LATER------------------------------------------
+        #set the first Z rotation
+        objects_irreg[0].rotation_euler.z = float(rotation_irregObj.z)
+
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
