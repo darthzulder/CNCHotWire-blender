@@ -648,23 +648,9 @@ class funcs():
             
             verts = foamcut_gpencil_curve.data.vertices
 
-            #create .nc file       
-            f = open("e:\BLENDER.nc","w+")
-            #direction will be form +X  to -X 
-            if verts[0].co.x < verts[len(verts)-1].co.x:
-                for i in reversed(range(0,len(verts))):
-                    coorX=str('%.4f' % verts[i].co.x)
-                    coorY=str('%.4f' % verts[i].co.y)
-                    coorZ=str('%.4f' % verts[i].co.z)
-                    #write in .nc file
-                    f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n')
-            else:
-                for i in range(0,len(verts)):
-                    coorX=str('%.4f' % verts[i].co.x)
-                    coorY=str('%.4f' % verts[i].co.y)
-                    coorZ=str('%.4f' % verts[i].co.z)
-                    #write in .nc file
-                    f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n')   
+            self.write_to_file(verts)
+
+ 
 
             #cut the foam with the actual object
             self.cut_foam()    
@@ -679,6 +665,25 @@ class funcs():
                     for space in area.spaces: 
                         if space.type == 'VIEW_3D':
                             space.shading.type = 'WIREFRAME'          
+
+    def write_to_file(self,verts):
+        #create .nc file       
+        f = open("e:\BLENDER.nc","w+")
+        #direction will be form +X  to -X 
+        if verts[0].co.x < verts[len(verts)-1].co.x:
+            for i in reversed(range(0,len(verts))):
+                coorX=str('%.4f' % verts[i].co.x)
+                coorY=str('%.4f' % verts[i].co.y)
+                coorZ=str('%.4f' % verts[i].co.z)
+                #write in .nc file
+                f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n')
+        else:
+            for i in range(0,len(verts)):
+                coorX=str('%.4f' % verts[i].co.x)
+                coorY=str('%.4f' % verts[i].co.y)
+                coorZ=str('%.4f' % verts[i].co.z)
+                #write in .nc file
+                f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n') 
 
     def cut_foam(self):
         bpy.ops.object.mode_set(mode='EDIT')
