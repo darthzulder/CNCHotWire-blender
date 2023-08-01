@@ -1,4 +1,5 @@
 import bpy
+import bmesh
 import math
 from mathutils import Vector
 #from . import funcs
@@ -648,6 +649,7 @@ class funcs():
             
             verts = foamcut_gpencil_curve.data.vertices
 
+            #export to a *.nc file
             self.write_to_file(verts)
 
  
@@ -657,14 +659,7 @@ class funcs():
 
             #hide gpencil
             #foamcut_gpencil_curve.hide_select =  True
-            bpy.context.scene.tool_settings.use_keyframe_insert_auto = False        
-
-            #change Viewport to Wireframe
-            for area in bpy.data.screens[3].areas: 
-                if area.type == 'VIEW_3D':
-                    for space in area.spaces: 
-                        if space.type == 'VIEW_3D':
-                            space.shading.type = 'WIREFRAME'          
+            bpy.context.scene.tool_settings.use_keyframe_insert_auto = False                
 
     def write_to_file(self,verts):
         #create .nc file       
@@ -685,6 +680,32 @@ class funcs():
                 #write in .nc file
                 f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n') 
 
+    def reorder_vertices(self, iniver):
+        #must be in EDIT mode
+        me = bpy.context.object.data
+        bm = bmesh.from_edit_mesh(me)
+        bm.verts.ensure_lookup_table()
+
+        # index of the start vertex SELECT the specific vertex
+        initial = bm.verts[iniver]
+
+        vert = initial
+        prev = None
+        for i in range(len(bm.verts)):
+            print(vert.index, i)
+            vert.index = i
+            next = None
+            adjacent = []
+            for v in [e.other_vert(vert) for e in vert.link_edges]:
+                if (v != prev and v != initial):
+                    next = v
+            if next == None: break
+            prev, vert = vert, next
+
+        bm.verts.sort()
+
+        bmesh.update_edit_mesh(me)
+    
     def cut_foam(self):
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action = 'SELECT')
@@ -817,6 +838,214 @@ class funcs():
         #set the first Z rotation
         objects_irreg[0].rotation_euler.z = float(rotation_irregObj.z)
 
+        #change Viewport to Wireframe
+        for area in bpy.data.screens[3].areas: 
+            if area.type == 'VIEW_3D':
+                for space in area.spaces: 
+                    if space.type == 'VIEW_3D':
+                        space.shading.type = 'WIREFRAME'
+    
+    def create_silhouette(self):
+        # Set CNC margin
+        CNC_margin = 2
+        # Set scale factor, how big will scale the siluete
+        scale_factor = 1.05
+        # Set subdivision level for the siluete
+        siluete_multires = 8
+
+        margen_max_cnc=1.137
+        margen_min_cnc=1.013
+
+        # Get the selected object
+        selected_object = bpy.context.active_object
+
+        # Move the 3D cursor below the selected object by the CNC_margin amount
+        loc_x, loc_y, loc_z = selected_object.location
+        bpy.context.scene.cursor.location = (loc_x, loc_y - CNC_margin, 0)
+
+        # Create a plane to serve as the cutter plane
+        bpy.ops.mesh.primitive_plane_add(size=3)
+        siluete = bpy.context.object
+        siluete.name = "cutterPlane.001"
+        siluete.rotation_euler = (math.radians(90), 0, 0)
+        bpy.ops.object.transform_apply(scale=True)
+        siluete.hide_select = True
+
+        # Add a Multiresolution modifier with 8 levels
+        Multires_01 = siluete.modifiers.new(name="Multires_01", type='MULTIRES')
+        for i in range(siluete_multires):
+            bpy.ops.object.multires_subdivide(modifier=Multires_01.name, mode='SIMPLE')
+
+        # Add a Shrinkwrap modifier to project the cutter plane onto the selected object
+        Srinkwrap_01 = siluete.modifiers.new(name="Srinkwrap_01", type='SHRINKWRAP')
+        Srinkwrap_01.target = selected_object
+        Srinkwrap_01.wrap_method = 'PROJECT'
+        Srinkwrap_01.wrap_mode = 'ON_SURFACE'
+        Srinkwrap_01.use_project_y = True
+        Srinkwrap_01.offset = -2
+
+        # Reset 3D cursor position
+        bpy.context.scene.cursor.location = (loc_x, loc_y, 0)
+
+        # Create a second plane to serve as the silhouette cutter
+        bpy.ops.mesh.primitive_plane_add(size=2)
+        cutter = bpy.context.object
+        cutter.name = "siluete.001"
+        cutter.rotation_euler = (math.radians(90), 0, 0)
+        bpy.ops.object.transform_apply(scale=True)
+
+        # Add a Boolean modifier to intersect the silhouette cutter with the projected plane
+        Boolean_01 = cutter.modifiers.new(name="Boolean_01", type='BOOLEAN')
+        Boolean_01.operation = 'INTERSECT'
+        Boolean_01.solver = 'FAST'
+        Boolean_01.object = siluete
+
+        # Apply the Boolean modifier to create the silhouette
+        bpy.ops.object.modifier_apply(modifier=Boolean_01.name)
+
+        # Set the origin of the silhouette cutter to the center of mass
+        bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS')
+
+        # Enter Edit Mode to reorder vertices
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+
+        # Get the mesh data and create a BMesh
+        me = bpy.context.object.data
+        bm = bmesh.from_edit_mesh(me)
+
+        # Dissolve vertices within a certain angle limit
+        bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(5), verts=bm.verts)
+
+        # Reorder vertices
+        bm.verts.ensure_lookup_table()
+
+        # Index of the start vertex
+        initial = bm.verts[0]
+
+        vert = initial
+        prev = None
+        for i in range(len(bm.verts)):
+            vert.index = i
+            next = None
+            adjacent = []
+            for v in [e.other_vert(vert) for e in vert.link_edges]:
+                if (v != prev and v != initial):
+                    next = v
+            if next == None:
+                break
+            prev, vert = vert, next
+
+        # Sort vertices
+        bm.verts.sort()
+
+        # Update the mesh
+        bmesh.update_edit_mesh(me)
+
+        # Exit Edit Mode
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        bpy.data.objects.remove(siluete, do_unlink=True)        
+        # select object to scale
+        siluete = bpy.context.active_object
+
+        # scale to all axis
+        siluete.scale[0] *= scale_factor
+        siluete.scale[1] *= scale_factor
+        siluete.scale[2] *= scale_factor
+
+        # Aplicar la escala al objeto
+        bpy.ops.object.transform_apply(scale=True)
+
+        # Create a plane to serve as the cutter plane
+        bpy.ops.mesh.primitive_plane_add(size=3)
+        plane_base = bpy.context.object
+        plane_base.name = "cutterPlane.001"
+        bpy.ops.object.transform_apply(scale=True)
+
+        bpy.ops.object.select_all(action='DESELECT')    
+        siluete.select_set(True)
+        bpy.context.view_layer.objects.active = siluete
+
+        # Add a Boolean modifier to intersect the silhouette cutter with the projected plane
+        Boolean_02 = siluete.modifiers.new(name="Boolean_02", type='BOOLEAN')
+        Boolean_02.solver = 'EXACT'
+        Boolean_02.object = plane_base
+
+        # Apply the Boolean modifier to create the silhouette
+        bpy.ops.object.modifier_apply(modifier=Boolean_02.name)
+        bpy.data.objects.remove(plane_base, do_unlink=True)
+
+
+        #---------------------------edit sluete------------------
+        # Select the plane object
+        obj = bpy.context.active_object
+
+        # Make sure you're in Edit Mode
+        bpy.ops.object.mode_set(mode='EDIT')
+        # Change back to Vertex selection mode
+        bpy.ops.mesh.select_mode(type="VERT")
+        bpy.ops.mesh.select_all(action = 'DESELECT')
+
+        # Create a new bmesh from the mesh data
+        bm = bmesh.from_edit_mesh(obj.data)
+
+        # Deselect all vertices
+        for v in bm.verts:
+            v.select = False
+
+        # Find the lowest Z coordinate among all vertices
+        lowest_z = min(v.co.z for v in bm.verts)
+
+
+        indices = []
+
+        # Select the vertices that have the lowest Z coordinate
+        lowest_z_vertices = [v for v in bm.verts if v.co.z == lowest_z]
+        for v in lowest_z_vertices:
+            v.select = True
+            indices.append(v.index)
+
+        # Find the vertex with the minimum X coordinate among the selected vertices
+        min_x_vertex = min(lowest_z_vertices, key=lambda v: v.co.x)
+
+        # Find the vertex with the maximum X coordinate among the selected vertices
+        max_x_vertex = max(lowest_z_vertices, key=lambda v: v.co.x)
+        
+
+        for e in bm.edges:
+            if e.verts[0].index in indices and e.verts[1].index in indices:
+                e.select = True
+                break
+
+        # Change to Edge selection mode
+        bpy.ops.mesh.select_mode(type="EDGE")
+
+        # Elimina los bordes seleccionados
+        bpy.ops.mesh.delete(type='EDGE')
+
+        # Change back to Vertex selection mode
+        bpy.ops.mesh.select_mode(type="VERT")
+
+        ##-------Extrude to the limits of the CNC---------
+        # Extrude the minimum X vertex -2 in the X direction
+        newvert = bm.verts.new((loc_x-margen_min_cnc, min_x_vertex.co.y, 0))
+        newedge = bm.edges.new([min_x_vertex, newvert])
+        indices_min=indices[1]+1
+        # Extrude the maximum X vertex +2 in the X direction
+        newvert = bm.verts.new((loc_x+margen_max_cnc, max_x_vertex.co.y, 0))
+        newedge = bm.edges.new([max_x_vertex, newvert])
+        indices_max=indices[1]+2
+
+        self.reorder_vertices(indices_max)
+
+        # Update the bmesh and exit Edit Mode
+        bmesh.update_edit_mesh(obj.data)
+        bpy.ops.object.mode_set(mode='OBJECT')
+    
+    def cut_silhouette():
+        #code here
+        a=1
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
@@ -847,6 +1076,8 @@ class BUTTOM_CUSTOM02(bpy.types.Operator):
 
         return {'FINISHED'}
     
+#----------------------------------------------------------    
+
 class BUTTOM_CUSTOM03(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM03_CutFoam"
     bl_idname = "object.button_custom03"
@@ -855,7 +1086,7 @@ class BUTTOM_CUSTOM03(bpy.types.Operator):
     def execute(self, context):
         
         funcion = funcs()
-        funcion.draw_init()
+        funcion.create_silhouette()
         
         print("execute button03 custom ok!")
 
@@ -869,7 +1100,7 @@ class BUTTOM_CUSTOM04(bpy.types.Operator):
     def execute(self, context):
         
         funcion = funcs()
-        funcion.gpencil_to_mesh()
+        funcion.reorder_vertices()
         
         print("execute button04 custom ok!")
 
