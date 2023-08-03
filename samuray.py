@@ -428,10 +428,10 @@ class funcs():
         bpy.ops.mesh.separate(type='LOOSE')
         bpy.ops.object.mode_set(mode='OBJECT')
 
-        # Obtener las partes separadas
+        # Get each parts
         objectBlocks = bpy.context.selected_objects
 
-        # Crear una nueva colección llamada "Blocks"
+        # Create a new collection
         cut_blocks_collection = bpy.data.collections.new("cut_Blocks")
         
         i=0
@@ -450,6 +450,7 @@ class funcs():
             bpy.context.scene.cursor.location = (block_location_X,block_location_Y,block_location_Z)
             # set the origin on the current object to the 3dcursor location
             bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+
             original_collection = block.users_collection[0]
             original_collection.objects.unlink(block)
             cut_blocks_collection.objects.link(block)
@@ -664,6 +665,7 @@ class funcs():
     def write_to_file(self,verts):
         #create .nc file       
         f = open("e:\BLENDER.nc","w+")
+        f.write(f'(BloqueXdesde_Blender)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y109.2000A0\nF600\n')
         #direction will be form +X  to -X 
         if verts[0].co.x < verts[len(verts)-1].co.x:
             for i in reversed(range(0,len(verts))):
@@ -679,6 +681,7 @@ class funcs():
                 coorZ=str('%.4f' % verts[i].co.z)
                 #write in .nc file
                 f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n') 
+        f.write(f'(Zigzag)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y109.2000A0\nF600\n')
 
     def reorder_vertices(self, iniver):
         #must be in EDIT mode
@@ -709,18 +712,14 @@ class funcs():
     def cut_foam(self):
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action = 'SELECT')
+        bpy.ops.mesh.edge_face_add()
         bpy.ops.mesh.extrude_region_move(TRANSFORM_OT_translate={"value":(0, 3, 0)})
         bpy.ops.object.mode_set(mode='OBJECT')        
 
         #identify and choose collection union
-        gpencil_obj = bpy.context.active_object
-        gpencil_coll = gpencil_obj.users_collection[0]
-        col = bpy.data.collections[gpencil_coll.name]
-
-        #--create solidfy to cut the foamBlock with gpencil mesh
-        solidfy_modifier_Z = gpencil_obj.modifiers.new(name="solid_001", type='SOLIDIFY')
-        solidfy_modifier_Z.thickness = 0.0001
-        bpy.ops.object.modifier_apply(modifier=solidfy_modifier_Z.name)
+        silhouette_selected = bpy.context.active_object
+        silhouette_coll = silhouette_selected.users_collection[0]
+        col = bpy.data.collections[silhouette_coll.name]
 
         # create a list requiring both objects selected and in chosen collection
         objects_cube = [object for object in col.objects if object.name.startswith(f"foamBlock.")]        
@@ -730,17 +729,18 @@ class funcs():
 
         #--create bool to cut the foamBlock with gpencil mesh
         #hide gpencil
-        gpencil_obj.hide_select =  True
-        gpencil_obj.select_set(False) # deselect to evade errors
+        silhouette_selected.hide_select =  True
+        silhouette_selected.select_set(False) # deselect to evade errors
         bpy.context.view_layer.objects.active = objects_cube[0]
         boolean_modifier_Z = objects_cube[0].modifiers.new(name="Cut_foam_001", type='BOOLEAN')
-        boolean_modifier_Z.solver = 'EXACT'
-        boolean_modifier_Z.object = gpencil_obj
+        boolean_modifier_Z.solver = 'FAST'
+        boolean_modifier_Z.operation = 'INTERSECT'
+        boolean_modifier_Z.object = silhouette_selected
         bpy.ops.object.modifier_apply(modifier=boolean_modifier_Z.name)
         
         
-        #bpy.data.objects.remove(gpencil_obj, do_unlink=True)
-
+        bpy.data.objects.remove(silhouette_selected, do_unlink=True)
+        '''
         # ------------------Separate by loose parts-------------------------
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action = 'SELECT')
@@ -844,6 +844,7 @@ class funcs():
                 for space in area.spaces: 
                     if space.type == 'VIEW_3D':
                         space.shading.type = 'WIREFRAME'
+    '''
     
     def create_silhouette(self):
         # Set CNC margin
@@ -858,53 +859,96 @@ class funcs():
 
         # Get the selected object
         selected_object = bpy.context.active_object
+        # Get the collee object
+        object_collection = selected_object.users_collection[0]
 
         # Move the 3D cursor below the selected object by the CNC_margin amount
         loc_x, loc_y, loc_z = selected_object.location
         bpy.context.scene.cursor.location = (loc_x, loc_y - CNC_margin, 0)
 
         # Create a plane to serve as the cutter plane
-        bpy.ops.mesh.primitive_plane_add(size=3)
-        siluete = bpy.context.object
-        siluete.name = "cutterPlane.001"
-        siluete.rotation_euler = (math.radians(90), 0, 0)
+        bpy.ops.mesh.primitive_plane_add(size=2)
+        silhouette_base = bpy.context.object
+        silhouette_base.name = "cutterPlane.001"
+        silhouette_base.rotation_euler = (math.radians(90), 0, 0)
         bpy.ops.object.transform_apply(scale=True)
-        siluete.hide_select = True
+        silhouette_base.hide_select = True
 
         # Add a Multiresolution modifier with 8 levels
-        Multires_01 = siluete.modifiers.new(name="Multires_01", type='MULTIRES')
+        Multires_01 = silhouette_base.modifiers.new(name="Multires_01", type='MULTIRES')
         for i in range(siluete_multires):
-            bpy.ops.object.multires_subdivide(modifier=Multires_01.name, mode='SIMPLE')
-
+            bpy.ops.object.multires_subdivide(modifier=Multires_01.name, mode='SIMPLE')        
         # Add a Shrinkwrap modifier to project the cutter plane onto the selected object
-        Srinkwrap_01 = siluete.modifiers.new(name="Srinkwrap_01", type='SHRINKWRAP')
+        Srinkwrap_01 = silhouette_base.modifiers.new(name="Srinkwrap_01", type='SHRINKWRAP')
         Srinkwrap_01.target = selected_object
         Srinkwrap_01.wrap_method = 'PROJECT'
         Srinkwrap_01.wrap_mode = 'ON_SURFACE'
         Srinkwrap_01.use_project_y = True
         Srinkwrap_01.offset = -2
+        
+        #apply modifiers
+        bpy.ops.object.modifier_apply(modifier=Multires_01.name)        
+        bpy.ops.object.modifier_apply(modifier=Srinkwrap_01.name)
 
+        #--scale by normals (shink/fatten)
+        bpy.ops.object.mode_set(mode='EDIT')        
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.normals_make_consistent(inside=False)
+        bpy.ops.transform.shrink_fatten(value=0.02)
+        bpy.ops.object.mode_set(mode='OBJECT')
+        
         # Reset 3D cursor position
         bpy.context.scene.cursor.location = (loc_x, loc_y, 0)
 
         # Create a second plane to serve as the silhouette cutter
+        distance_to_plane=0.6
         bpy.ops.mesh.primitive_plane_add(size=2)
-        cutter = bpy.context.object
-        cutter.name = "siluete.001"
-        cutter.rotation_euler = (math.radians(90), 0, 0)
+        silhouette = bpy.context.object
+        silhouette.name = "siluete.001"
+        silhouette.rotation_euler = (math.radians(90), 0, 0)
+        silhouette.location.y=silhouette_base.location.y+distance_to_plane
         bpy.ops.object.transform_apply(scale=True)
 
+        #change silhouette collection to actual collection.    
+        siluete_collection = silhouette.users_collection[0]
+        siluete_collection.objects.unlink(silhouette)
+        object_collection.objects.link(silhouette)
+        bpy.context.view_layer.objects.active = silhouette        
+
         # Add a Boolean modifier to intersect the silhouette cutter with the projected plane
-        Boolean_01 = cutter.modifiers.new(name="Boolean_01", type='BOOLEAN')
+        Boolean_01 = silhouette.modifiers.new(name="Boolean_01", type='BOOLEAN')
         Boolean_01.operation = 'INTERSECT'
         Boolean_01.solver = 'FAST'
-        Boolean_01.object = siluete
+        Boolean_01.object = silhouette_base
 
         # Apply the Boolean modifier to create the silhouette
         bpy.ops.object.modifier_apply(modifier=Boolean_01.name)
 
         # Set the origin of the silhouette cutter to the center of mass
         bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS')
+
+        # ---------------------cut the base of the silhouette (<0 in Z)----------------------------------
+        # Create a plane to serve as the cutter plane
+        bpy.ops.mesh.primitive_plane_add(size=5)
+        plane_base = bpy.context.object
+        plane_base.name = "cutterPlane.001"
+        bpy.ops.object.transform_apply(scale=True)
+
+        bpy.ops.object.select_all(action='DESELECT')    
+        silhouette.select_set(True)
+        bpy.context.view_layer.objects.active = silhouette
+
+        # Add a Boolean modifier to intersect the silhouette cutter with the projected plane
+        Boolean_02 = silhouette.modifiers.new(name="Boolean_02", type='BOOLEAN')
+        Boolean_02.solver = 'EXACT'
+        Boolean_02.object = plane_base
+
+        # Apply the Boolean modifier to create the silhouette
+        bpy.ops.object.modifier_apply(modifier=Boolean_02.name)
+        bpy.data.objects.remove(plane_base, do_unlink=True)
+
+        #move silhouette to the center of the irregular object
+        silhouette.location.y=loc_y
 
         # Enter Edit Mode to reorder vertices
         bpy.ops.object.mode_set(mode='EDIT')
@@ -945,37 +989,12 @@ class funcs():
         # Exit Edit Mode
         bpy.ops.object.mode_set(mode='OBJECT')
 
-        bpy.data.objects.remove(siluete, do_unlink=True)        
+        bpy.data.objects.remove(silhouette_base, do_unlink=True)        
         # select object to scale
-        siluete = bpy.context.active_object
-
-        # scale to all axis
-        siluete.scale[0] *= scale_factor
-        siluete.scale[1] *= scale_factor
-        siluete.scale[2] *= scale_factor
-
+        silhouette_curve = bpy.context.active_object
+        
         # Aplicar la escala al objeto
         bpy.ops.object.transform_apply(scale=True)
-
-        # Create a plane to serve as the cutter plane
-        bpy.ops.mesh.primitive_plane_add(size=3)
-        plane_base = bpy.context.object
-        plane_base.name = "cutterPlane.001"
-        bpy.ops.object.transform_apply(scale=True)
-
-        bpy.ops.object.select_all(action='DESELECT')    
-        siluete.select_set(True)
-        bpy.context.view_layer.objects.active = siluete
-
-        # Add a Boolean modifier to intersect the silhouette cutter with the projected plane
-        Boolean_02 = siluete.modifiers.new(name="Boolean_02", type='BOOLEAN')
-        Boolean_02.solver = 'EXACT'
-        Boolean_02.object = plane_base
-
-        # Apply the Boolean modifier to create the silhouette
-        bpy.ops.object.modifier_apply(modifier=Boolean_02.name)
-        bpy.data.objects.remove(plane_base, do_unlink=True)
-
 
         #---------------------------edit sluete------------------
         # Select the plane object
@@ -1042,10 +1061,16 @@ class funcs():
         # Update the bmesh and exit Edit Mode
         bmesh.update_edit_mesh(obj.data)
         bpy.ops.object.mode_set(mode='OBJECT')
+
+        
     
-    def cut_silhouette():
-        #code here
-        a=1
+    def cut_silhouette(self):
+        
+        silhouette = bpy.context.object
+        silhouette.location.z = -0.005
+        silhouette.location.y = -1.5
+        self.cut_foam()
+
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
@@ -1100,7 +1125,7 @@ class BUTTOM_CUSTOM04(bpy.types.Operator):
     def execute(self, context):
         
         funcion = funcs()
-        funcion.reorder_vertices()
+        funcion.cut_silhouette()
         
         print("execute button04 custom ok!")
 
@@ -1156,7 +1181,7 @@ class PANEL_CUSTOM_UI_02(bpy.types.Panel):
         # add button custom
         row01 = layout.row()
         row01.scale_y = 2
-        row01.operator("object.button_custom03", text= "Create Gpencil", icon = "MODIFIER_ON")
+        row01.operator("object.button_custom03", text= "Create Silhouette", icon = "MODIFIER_ON")
 
         #create simple row
         row01 = layout.row()
@@ -1165,7 +1190,7 @@ class PANEL_CUSTOM_UI_02(bpy.types.Panel):
         # add button custom
         row01 = layout.row()
         row01.scale_y = 2
-        row01.operator("object.button_custom04", text= "Gpencil to code", icon = "MODIFIER_ON")
+        row01.operator("object.button_custom04", text= "Gpencil cut silhouette", icon = "MODIFIER_ON")
 
 # REGISTER (PART 2)
 ####################################################
