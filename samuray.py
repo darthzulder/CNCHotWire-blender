@@ -539,7 +539,7 @@ class funcs():
                     areaCNC.hide_select = True
                     #make areaCNC and block just wire visible
                     areaCNC.display_type = 'WIRE'
-                    object_cube_obj.display_type = 'WIRE'
+                    #object_cube_obj.display_type = 'WIRE'
 
                     # Create a new collection for the related objects
                     blocks_collection = bpy.data.collections.new(f"{collections_name}.000")
@@ -662,26 +662,42 @@ class funcs():
             #foamcut_gpencil_curve.hide_select =  True
             bpy.context.scene.tool_settings.use_keyframe_insert_auto = False                
 
-    def write_to_file(self,verts):
+    def write_to_file(self,verts,rotation_z_degrees):
+        scale=1000
         #create .nc file       
         f = open("e:\BLENDER.nc","w+")
-        f.write(f'(BloqueXdesde_Blender)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y109.2000A0\nF600\n')
+        f.write(f'(BloqueXdesde_Blender)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
         #direction will be form +X  to -X 
+
         if verts[0].co.x < verts[len(verts)-1].co.x:
+            middle_x = (verts[len(verts)-1].co.x + verts[0].co.x) / 2
             for i in reversed(range(0,len(verts))):
-                coorX=str('%.4f' % verts[i].co.x)
-                coorY=str('%.4f' % verts[i].co.y)
-                coorZ=str('%.4f' % verts[i].co.z)
+                distance_to_middle = verts[i].co.x - middle_x
+                new_x = middle_x - distance_to_middle
+                x=(new_x - verts[len(verts)-1].co.x) * scale
+                y=verts[i].co.y * scale
+                z=verts[i].co.z * scale
+                coorX=str('%.4f' % x)
+                coorY=str('%.4f' % y)
+                coorZ=str('%.4f' % z)
                 #write in .nc file
-                f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n')
+                f.write(f'G01X{coorX}Y{coorZ}A{rotation_z_degrees}\n')
         else:
+            middle_x = (verts[len(verts)-1].co.x + verts[0].co.x) / 2
             for i in range(0,len(verts)):
-                coorX=str('%.4f' % verts[i].co.x)
-                coorY=str('%.4f' % verts[i].co.y)
-                coorZ=str('%.4f' % verts[i].co.z)
+                distance_to_middle = verts[i].co.x - middle_x
+                new_x = middle_x - distance_to_middle
+                x=(new_x - verts[len(verts)-1].co.x) * scale
+                y=verts[i].co.y * scale
+                z=verts[i].co.z * scale
+                coorX=str('%.4f' % x)
+                coorY=str('%.4f' % y)
+                coorZ=str('%.4f' % z)
                 #write in .nc file
-                f.write(f'G01X{coorX}Y{coorZ}A{coorY}\n') 
-        f.write(f'(Zigzag)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y109.2000A0\nF600\n')
+                f.write(f'G01X{coorX}Y{coorZ}A{rotation_z_degrees}\n') 
+        f.write(f'G01X2150Y1200A{rotation_z_degrees}\n') 
+        f.write(f'G01X0Y1200A{rotation_z_degrees}\n')
+        f.write(f'(Zigzag)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
 
     def reorder_vertices(self, iniver):
         #must be in EDIT mode
@@ -691,21 +707,22 @@ class funcs():
 
         # index of the start vertex SELECT the specific vertex
         initial = bm.verts[iniver]
-
+        print(f'inivert-->{iniver}')
         vert = initial
-        prev = None
+        visited_verts = set()
         for i in range(len(bm.verts)):
-            print(vert.index, i)
+            print(f'reorder--{vert.index, i}')
             vert.index = i
             next = None
-            adjacent = []
-            for v in [e.other_vert(vert) for e in vert.link_edges]:
-                if (v != prev and v != initial):
-                    next = v
+            for edge in vert.link_edges:
+                next = edge.other_vert(vert)
+                if next not in visited_verts:
+                    visited_verts.add(vert)
+                    break
             if next == None: break
-            prev, vert = vert, next
+            vert = next
 
-        bm.verts.sort()
+        bm.verts.sort(key=lambda v: v.index)
 
         bmesh.update_edit_mesh(me)
     
@@ -737,114 +754,8 @@ class funcs():
         boolean_modifier_Z.operation = 'INTERSECT'
         boolean_modifier_Z.object = silhouette_selected
         bpy.ops.object.modifier_apply(modifier=boolean_modifier_Z.name)
-        
-        
-        bpy.data.objects.remove(silhouette_selected, do_unlink=True)
-        '''
-        # ------------------Separate by loose parts-------------------------
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action = 'SELECT')
-        bpy.ops.mesh.separate(type='LOOSE')
-        bpy.ops.object.mode_set(mode='OBJECT') 
-        
-        #rest Z rotation to get real bound_box coord
-        rotation_irregObj = objects_irreg[0].rotation_euler.copy()
-        
-        #objects_irreg[0].rotation_euler.z = math.radians(0)
-        # Get divided parts
-        
-        # create a list requiring both objects
-        objects_cubes = [object for object in col.objects if object.name.startswith(f"foamBlock.")]
-        
-        for object_irregular in objects_irreg:              
-                object_irregular.rotation_euler.z = math.radians(0)
-        for object_cube in objects_cubes:
-                object_cube.rotation_euler.z = math.radians(0)
-
-        #print(objects_irreg)
-        adjust_value = 0.01
-        for object_irregular in objects_irreg:
-                # Get the world coordinates of the bounding-box-points of object_irregular                
-                #object_irregular.rotation_euler.z = math.radians(0)
-                bbox_irregular = [ [float(math.ceil(elem * 100) / 100) for elem in object_irregular.matrix_world @ Vector(coor)] for coor in object_irregular.bound_box]
-                bpy.ops.object.select_all(action='DESELECT')                                    
                 
-                print(f'R: {object_irregular.rotation_euler.z} Coordenadas de {object_irregular.name}: {bbox_irregular}')
-                # Check if each irregular object is contained within any cube object
-                for object_cube in objects_cubes:
-                    have_something_inside = 0
-                    #object_cube.rotation_euler.z = math.radians(0)
-                    object_cube.select_set(True)
-                    # # Get the world coordinates bounding-box-points of object_cube
-                    bbox_cube = [[float(math.ceil(elem * 100) / 100)  for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
-                    # # Check if the bounding box of the irregular object is contained within the bounding box of the cube object
-                    #bpy.ops.object.transform_apply(rotation=True)
-                    print(f'Coordenadas de {object_cube.name}: {bbox_cube}')
-                    is_inside = all(
-                        (bbox_cube[0][i]-adjust_value) <= bbox_irregular[0][i] <= (bbox_cube[6][i]+adjust_value) and
-                        (bbox_cube[0][i]-adjust_value) <= bbox_irregular[6][i] <= (bbox_cube[6][i]+adjust_value)
-                        for i in range(3)
-                    )
-                                    
-                    if is_inside:
-                        have_something_inside = 1
-                    
-                    for i in range(3):
-                        print(f'R: {object_cube.rotation_euler.z} dentro?: {have_something_inside} | {bbox_cube[0][i]-adjust_value} <= {bbox_irregular[0][i]} <= {bbox_cube[6][i]+adjust_value} and {bbox_cube[0][i]-adjust_value} <= {bbox_irregular[6][i]} <= {bbox_cube[6][i]+adjust_value}')
-                        print(f'R: {object_cube.rotation_euler.z} dentro?: {bbox_cube[0][i]-adjust_value <= bbox_irregular[0][i] <= bbox_cube[6][i]+adjust_value and bbox_cube[0][i]-adjust_value <= bbox_irregular[6][i] <= bbox_cube[6][i]+adjust_value}')
-                    bpy.ops.object.select_all(action='DESELECT')
-                print(f'R2: {object_irregular.rotation_euler.z} Coordenadas de {object_irregular.name}: {bbox_irregular}')
-                #Delete cube if don't have nothing inside            
-                #if have_something_inside == 0:
-                #    bpy.data.objects.remove(object_cube, do_unlink=True)
-
-        
-        #-------------------------------PATCH SOLUTION - MUST FIX LATER------------------------------------------
-        
-        foamcoll = bpy.data.collections['Collection.001']
-        objects_cubes = [object for object in foamcoll.objects if object.name.startswith(f"foamBlock.")]
-        #objects_irreg = [object for object in foamcoll.objects if object.name.startswith(f"irregObjPart.")]
-        for object_cube in objects_cubes:
-            # # Get the world coordinates bounding-box-points of object_cube
-            bbox_cube = [[float(math.ceil(elem * 100) / 100)  for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
-            bbox_irreg = [[float(math.ceil(elem * 100) / 100)  for elem in objects_irreg[0].matrix_world @ Vector(coor)] for coor in objects_irreg[0].bound_box]
-            print(f'*****--Coordenadas de {object_cube.name}: {bbox_cube}')  
-            print(f'*****--Coordenadas de {objects_irreg[0].name}: {bbox_irreg}')    
-            have_something_inside = 0
-            #object_cube.rotation_euler.z = math.radians(0)
-            object_cube.select_set(True)
-            # # Get the world coordinates bounding-box-points of object_cube
-            bbox_cube = [[float(math.ceil(elem * 100) / 100)  for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
-            # # Check if the bounding box of the irregular object is contained within the bounding box of the cube object
-            #bpy.ops.object.transform_apply(rotation=True)
-            print(f'Coordenadas de {object_cube.name}: {bbox_cube}')
-            is_inside = all(
-                (bbox_cube[0][i]-adjust_value) <= bbox_irreg[0][i] <= (bbox_cube[6][i]+adjust_value) and
-                (bbox_cube[0][i]-adjust_value) <= bbox_irreg[6][i] <= (bbox_cube[6][i]+adjust_value)
-                for i in range(3)
-            )
-                            
-            if is_inside:
-                have_something_inside = 1
-            
-            for i in range(3):
-                print(f'R: {object_cube.rotation_euler.z} dentro?: {have_something_inside} | {bbox_cube[0][i]-adjust_value} <= {bbox_irreg[0][i]} <= {bbox_cube[6][i]+adjust_value} and {bbox_cube[0][i]-adjust_value} <= {bbox_irreg[6][i]} <= {bbox_cube[6][i]+adjust_value}')
-                print(f'R: {object_cube.rotation_euler.z} dentro?: {bbox_cube[0][i]-adjust_value <= bbox_irreg[0][i] <= bbox_cube[6][i]+adjust_value and bbox_cube[0][i]-adjust_value <= bbox_irreg[6][i] <= bbox_cube[6][i]+adjust_value}')
-            bpy.ops.object.select_all(action='DESELECT')  
-            #Delete cube if don't have nothing inside
-            if have_something_inside == 0:
-                    bpy.data.objects.remove(object_cube, do_unlink=True)
-        #-------------------------------END PATCH SOLUTION - MUST FIX LATER------------------------------------------
-        #set the first Z rotation
-        objects_irreg[0].rotation_euler.z = float(rotation_irregObj.z)
-
-        #change Viewport to Wireframe
-        for area in bpy.data.screens[3].areas: 
-            if area.type == 'VIEW_3D':
-                for space in area.spaces: 
-                    if space.type == 'VIEW_3D':
-                        space.shading.type = 'WIREFRAME'
-    '''
+        bpy.data.objects.remove(silhouette_selected, do_unlink=True)
     
     def create_silhouette(self):
         # Set CNC margin
@@ -852,7 +763,7 @@ class funcs():
         # Set scale factor, how big will scale the siluete
         scale_factor = 1.05
         # Set subdivision level for the siluete
-        siluete_multires = 8
+        siluete_multires = 7
 
         margen_max_cnc=1.137
         margen_min_cnc=1.013
@@ -871,7 +782,7 @@ class funcs():
         silhouette_base = bpy.context.object
         silhouette_base.name = "cutterPlane.001"
         silhouette_base.rotation_euler = (math.radians(90), 0, 0)
-        bpy.ops.object.transform_apply(scale=True)
+        bpy.ops.object.transform_apply(scale=True,location=False)
         silhouette_base.hide_select = True
 
         # Add a Multiresolution modifier with 8 levels
@@ -901,14 +812,14 @@ class funcs():
         bpy.context.scene.cursor.location = (loc_x, loc_y, 0)
 
         # Create a second plane to serve as the silhouette cutter
-        distance_to_plane=0.6
+        distance_to_plane=0.025
         bpy.ops.mesh.primitive_plane_add(size=2)
         silhouette = bpy.context.object
         silhouette.name = "siluete.001"
         silhouette.rotation_euler = (math.radians(90), 0, 0)
         silhouette.location.y=silhouette_base.location.y+distance_to_plane
-        bpy.ops.object.transform_apply(scale=True)
-
+        bpy.ops.object.transform_apply(scale=True,location=False)
+        
         #change silhouette collection to actual collection.    
         siluete_collection = silhouette.users_collection[0]
         siluete_collection.objects.unlink(silhouette)
@@ -932,7 +843,7 @@ class funcs():
         bpy.ops.mesh.primitive_plane_add(size=5)
         plane_base = bpy.context.object
         plane_base.name = "cutterPlane.001"
-        bpy.ops.object.transform_apply(scale=True)
+        bpy.ops.object.transform_apply(scale=True,location=False)
 
         bpy.ops.object.select_all(action='DESELECT')    
         silhouette.select_set(True)
@@ -946,10 +857,10 @@ class funcs():
         # Apply the Boolean modifier to create the silhouette
         bpy.ops.object.modifier_apply(modifier=Boolean_02.name)
         bpy.data.objects.remove(plane_base, do_unlink=True)
-
+        
         #move silhouette to the center of the irregular object
         silhouette.location.y=loc_y
-
+        
         # Enter Edit Mode to reorder vertices
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='SELECT')
@@ -961,7 +872,7 @@ class funcs():
         # Dissolve vertices within a certain angle limit
         bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(5), verts=bm.verts)
 
-        # Reorder vertices
+        #----------------------Reorder vertices----------------------------
         bm.verts.ensure_lookup_table()
 
         # Index of the start vertex
@@ -1017,13 +928,13 @@ class funcs():
         lowest_z = min(v.co.z for v in bm.verts)
 
 
-        indices = []
+        indices_in_z = []
 
         # Select the vertices that have the lowest Z coordinate
         lowest_z_vertices = [v for v in bm.verts if v.co.z == lowest_z]
         for v in lowest_z_vertices:
             v.select = True
-            indices.append(v.index)
+            indices_in_z.append(v.index)
 
         # Find the vertex with the minimum X coordinate among the selected vertices
         min_x_vertex = min(lowest_z_vertices, key=lambda v: v.co.x)
@@ -1033,7 +944,7 @@ class funcs():
         
 
         for e in bm.edges:
-            if e.verts[0].index in indices and e.verts[1].index in indices:
+            if e.verts[0].index in indices_in_z and e.verts[1].index in indices_in_z:
                 e.select = True
                 break
 
@@ -1050,24 +961,40 @@ class funcs():
         # Extrude the minimum X vertex -2 in the X direction
         newvert = bm.verts.new((loc_x-margen_min_cnc, min_x_vertex.co.y, 0))
         newedge = bm.edges.new([min_x_vertex, newvert])
-        indices_min=indices[1]+1
+        indices_min=indices_in_z[1]+1
         # Extrude the maximum X vertex +2 in the X direction
         newvert = bm.verts.new((loc_x+margen_max_cnc, max_x_vertex.co.y, 0))
         newedge = bm.edges.new([max_x_vertex, newvert])
-        indices_max=indices[1]+2
-
+        indices_max=len(bm.verts)-1
+           
         self.reorder_vertices(indices_max)
 
         # Update the bmesh and exit Edit Mode
         bmesh.update_edit_mesh(obj.data)
         bpy.ops.object.mode_set(mode='OBJECT')
 
+    def cut_silhouette(self, loc_z):
         
-    
-    def cut_silhouette(self):
+        selected_silhouette = bpy.context.selected_objects[0]
+        #get colection name
+        collection_name = selected_silhouette.users_collection[0].name
+        #get irregular object
+        irregular_obj = [obj for obj in bpy.data.objects if obj.name.startswith("irregObjPart.") and collection_name in obj.users_collection[0].name]
         
+        if irregular_obj:
+            target_object = irregular_obj[0]
+            rotation_euler = target_object.rotation_euler
+            rotation_z_degrees = math.degrees(rotation_euler.z)
+            print(f"Rotation in Z of {target_object.name}: {rotation_z_degrees} degrees")
+        else:
+            print("No related objects found in the same collection.")
+                
+        verts = selected_silhouette.data.vertices
+
+        #export to a *.nc file
+        self.write_to_file(verts,rotation_z_degrees)
         silhouette = bpy.context.object
-        silhouette.location.z = -0.005
+        silhouette.location.z = loc_z
         silhouette.location.y = -1.5
         self.cut_foam()
 
@@ -1118,14 +1045,23 @@ class BUTTOM_CUSTOM03(bpy.types.Operator):
         return {'FINISHED'}
     
 class BUTTOM_CUSTOM04(bpy.types.Operator):
-    bl_label = "BUTTOM_CUSTOM04_CutFoam"
+    bl_label = "Calibrate Cut in Z axis"
     bl_idname = "object.button_custom04"
-    bl_options = {'UNDO'}
+    bl_options = {'REGISTER','UNDO'} #REGISTER popup a little window in the left down corner to introduce the parameters values
+
+    location_z: bpy.props.FloatProperty(
+        name="Z",
+        description="location in the Z axis for the solhouette",
+        default=-0.001,
+        min=-0.009,
+        soft_max=-0.0005,step=0.001,
+    )
 
     def execute(self, context):
         
         funcion = funcs()
-        funcion.cut_silhouette()
+        funcion.cut_silhouette(self.location_z)
+        #funcion.reorder_vertices(0)
         
         print("execute button04 custom ok!")
 
@@ -1152,7 +1088,7 @@ class PANEL_CUSTOM_UI_01(bpy.types.Panel):
         # add button custom
         row01 = layout.row()
         row01.scale_y = 2
-        row01.operator("object.button_custom01", text= "Prepare Work Area", icon = "MODIFIER_ON")
+        row01.operator("object.button_custom01", text= "Prepare Work Area", icon = "GRID")
 
         #create simple row
         row02 = layout.row()
@@ -1161,7 +1097,7 @@ class PANEL_CUSTOM_UI_01(bpy.types.Panel):
         # add button custom
         row02 = layout.row()
         row02.scale_y = 2
-        row02.operator("object.button_custom02", text= "Prepare Cuts in CNC Hot Wire", icon = "MODIFIER_ON")
+        row02.operator("object.button_custom02", text= "Prepare Cuts in CNC Hot Wire", icon = "IMGDISPLAY")
 
 class PANEL_CUSTOM_UI_02(bpy.types.Panel):
     bl_label = "CNC Hot-Wire"
@@ -1181,7 +1117,7 @@ class PANEL_CUSTOM_UI_02(bpy.types.Panel):
         # add button custom
         row01 = layout.row()
         row01.scale_y = 2
-        row01.operator("object.button_custom03", text= "Create Silhouette", icon = "MODIFIER_ON")
+        row01.operator("object.button_custom03", text= "Create Silhouette", icon = "MOD_SHRINKWRAP")
 
         #create simple row
         row01 = layout.row()
@@ -1190,7 +1126,7 @@ class PANEL_CUSTOM_UI_02(bpy.types.Panel):
         # add button custom
         row01 = layout.row()
         row01.scale_y = 2
-        row01.operator("object.button_custom04", text= "Gpencil cut silhouette", icon = "MODIFIER_ON")
+        row01.operator("object.button_custom04", text= "Cut silhouette", icon = "SCULPTMODE_HLT")
 
 # REGISTER (PART 2)
 ####################################################
