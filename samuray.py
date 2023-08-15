@@ -3,7 +3,7 @@ import bmesh
 import math
 from mathutils import Vector
 #from . import funcs
-import os
+import os, errno
 dir = os.path.dirname(bpy.data.filepath)
 print(f"------->{dir}")
 #funcs = bpy.data.texts["funcs.py"].as_module()
@@ -464,7 +464,7 @@ class funcs():
         #save state in case of error
         bpy.ops.ed.undo_push(message="inner_part_verif Function")
         try:
-            collections_name = "Part"
+            collections_name = "P"
             cubes_name = "foamBlock"
             object_selected_name = "irregObjPart"
             bpy.context.active_object.name = f"{object_selected_name}.001"
@@ -662,10 +662,23 @@ class funcs():
             #foamcut_gpencil_curve.hide_select =  True
             bpy.context.scene.tool_settings.use_keyframe_insert_auto = False                
 
-    def write_to_file(self,verts,rotation_z_degrees):
+    def write_to_file(self,verts,rotation_z_degrees,collection_name,update=False):
         scale=1000
-        #create .nc file       
-        f = open("e:\BLENDER.nc","w+")
+        i=0
+        pathFile=".\\"+collection_name+"\\"+collection_name+"."+'%03d' % i +"_samurai.nc"
+        #create .nc file 
+        try:
+            os.makedirs(".\\"+collection_name, exist_ok=True)  
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
+        while os.path.exists(pathFile):
+            i=i+1
+            pathFile=".\\"+collection_name+"\\"+collection_name+"."+'%03d' % i +"_samurai.nc"
+        if update == True:
+            i=i-1
+            pathFile=".\\"+collection_name+"\\"+collection_name+"."+'%03d' % i +"_samurai.nc"
+        f = open(pathFile,"w+")
         f.write(f'(BloqueXdesde_Blender)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
         #direction will be form +X  to -X 
 
@@ -973,7 +986,7 @@ class funcs():
         bmesh.update_edit_mesh(obj.data)
         bpy.ops.object.mode_set(mode='OBJECT')
 
-    def cut_silhouette(self, loc_z):
+    def cut_silhouette(self, loc_z, update=False):
         
         selected_silhouette = bpy.context.selected_objects[0]
         #get colection name
@@ -992,7 +1005,7 @@ class funcs():
         verts = selected_silhouette.data.vertices
 
         #export to a *.nc file
-        self.write_to_file(verts,rotation_z_degrees)
+        self.write_to_file(verts,rotation_z_degrees,collection_name,update)
         silhouette = bpy.context.object
         silhouette.location.z = loc_z
         silhouette.location.y = -1.5
@@ -1049,23 +1062,38 @@ class BUTTOM_CUSTOM04(bpy.types.Operator):
     bl_idname = "object.button_custom04"
     bl_options = {'REGISTER','UNDO'} #REGISTER popup a little window in the left down corner to introduce the parameters values
 
+    udpdate_value_bool : bpy.props.BoolProperty(
+        name="update", 
+        default=False, 
+        options={'HIDDEN','SKIP_SAVE'}
+        )
+    
+    def execute_updater(self, context):
+        
+        self.udpdate_value_bool = True
+
+        return None
+
     location_z: bpy.props.FloatProperty(
         name="Z",
-        description="location in the Z axis for the solhouette",
+        description="location in the Z axis for the silhouette_cut",
         default=-0.001,
         min=-0.009,
         soft_max=-0.0005,step=0.001,
+        update=execute_updater,
+        options={'SKIP_SAVE'}
     )
 
     def execute(self, context):
         
         funcion = funcs()
-        funcion.cut_silhouette(self.location_z)
+        funcion.cut_silhouette(self.location_z,self.udpdate_value_bool)
         #funcion.reorder_vertices(0)
         
-        print("execute button04 custom ok!")
+        print("execute button04 custom ok!, Update:" + str(self.udpdate_value_bool))
 
         return {'FINISHED'}
+    
     
 # PANEL UI (PART 1 DRAW)
 ####################################################
