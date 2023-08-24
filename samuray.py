@@ -10,6 +10,16 @@ print(f"------->{dir}")
 
 #Funciones
 class funcs():
+
+    foam_block_x = 1.410
+    foam_block_y = 0.980
+    foam_block_z = 1.180
+
+    cut_thickness = 0.02
+
+    foam_block_cut_x = foam_block_x + cut_thickness
+    foam_block_cut_y = foam_block_y + cut_thickness
+    foam_block_cut_z = foam_block_z
     
     def change_origin (self):
         print(f"-------change_origin>{dir}")
@@ -79,7 +89,7 @@ class funcs():
         # set 3dcursor location back to the stored location
         bpy.context.scene.cursor.location = saved_location
 
-    def create_block_greed (self, dimensions_X, dimensions_Y, dimensions_Z, foam_size_X = 1.410, foam_size_Y = 0.980, foam_size_Z = 1.180/2, separation = 0.02, scale = 1):
+    def create_block_greed (self, dimensions_X, dimensions_Y, dimensions_Z, foam_size_X, foam_size_Y, foam_size_Z, separation , scale = 1):
         print(f"-------create_block_greed>{dir}")
         # IN METERS
         n_blocks_x = math.ceil(dimensions_X/foam_size_X)
@@ -167,8 +177,8 @@ class funcs():
         # Agregar la colección "Blocks" a la escena
         bpy.context.scene.collection.children.link(blocks_collection)      
 
-    def create_cutter_planes (self, dimensions_X,dimensions_Y, dimensions_Z, separation_x = 1.43, separation_y = 1, separation_z = 1.180/2,  plane_thickness = 0.02, scale = 1):
-        
+    def create_cutter_planes (self, dimensions_X,dimensions_Y, dimensions_Z, separation_z, separation_x, separation_y,  plane_thickness, scale = 1):               
+
         plane_size_high = (dimensions_Z+0.5)
 
         faces_count_x = math.ceil(dimensions_X/separation_x)+1 
@@ -309,7 +319,7 @@ class funcs():
 
         return AreaCNC
 
-    def create_woods (self, dimensions_X,dimensions_Y, dimensions_Z, separation_x = 1.43, separation_y = 1, separation_z = 1.180/2,  plane_thickness = 0.02, scale = 1):
+    def create_woods (self, dimensions_X,dimensions_Y, dimensions_Z, separation_z, separation_x, separation_y,  plane_thickness, scale = 1):
 
         plane_size_high = (separation_z+0.5)
 
@@ -337,15 +347,14 @@ class funcs():
         #cutterPlane_X.rotation_euler = (0,math.radians(90),0)
         bpy.ops.object.transform_apply(scale=True)
 
-        # Agregar el modificador Array
+        # Add array modifier
         array_modifier_X1 = cutterWood_X.modifiers.new(name="Array_X", type='ARRAY')
 
-        # Definir las propiedades del modificador
-        array_modifier_X1.count = faces_count_x  # Número de repeticiones
-        array_modifier_X1.relative_offset_displace = (1.0, 0.0, 0.0)  # Desplazamiento relativo
-        array_modifier_X1.use_constant_offset = True  # Usar desplazamiento constante
-        array_modifier_X1.constant_offset_displace = ((separation_x-wood_width)*scale, 0.0, 0.0)  # Desplazamiento constante
-
+        # Set modifier properties
+        array_modifier_X1.count = faces_count_x  # count number
+        array_modifier_X1.relative_offset_displace = (1.0, 0.0, 0.0)  # Relative Offset
+        array_modifier_X1.use_constant_offset = True  # Use constant offset
+        array_modifier_X1.constant_offset_displace = ((separation_x-wood_width)*scale, 0.0, 0.0)  # Constant offset displace
 
         # -----create primitive Plane as cutterPlane --Cuts in Y--
         # change cursor location
@@ -357,21 +366,29 @@ class funcs():
         #cutterPlane_Y.rotation_euler = (math.radians(90),0,0)
         bpy.ops.object.transform_apply(scale=True)
 
-        # Agregar el modificador Array
+        # Add array modifier
         array_modifier_Y1 = cutterWood_Y.modifiers.new(name="Array_Y", type='ARRAY')
 
-        # Definir las propiedades del modificador
-        array_modifier_Y1.count = faces_count_y  # Número de repeticiones
-        array_modifier_Y1.relative_offset_displace = (0.0, 1.0, 0.0)  # Desplazamiento relativo
-        array_modifier_Y1.use_constant_offset = True  # Usar desplazamiento constante
-        array_modifier_Y1.constant_offset_displace = (0.0, (separation_y-wood_width)*scale, 0.0)  # Desplazamiento constante
+        # Set modifier properties
+        array_modifier_Y1.count = faces_count_y  # count number
+        array_modifier_Y1.relative_offset_displace = (0.0, 1.0, 0.0)  # Relative Offset
+        array_modifier_Y1.use_constant_offset = True  # Use constant offset
+        array_modifier_Y1.constant_offset_displace = (0.0, (separation_y-wood_width)*scale, 0.0)  # Constant offset displace
+        
+        # Apply modifiers
+        bpy.ops.object.modifier_apply(modifier=array_modifier_Y1.name)
+        bpy.ops.object.modifier_apply(modifier=array_modifier_X1.name)
 
     def crate_around_object (self, scale = 1):
         print(f"-------crate_around_object>{dir}")
         # store the location of current 3d cursor
         saved_location = bpy.context.scene.cursor.location.xyz   # returns a vector
         
-        
+        foam_block_hight_x = self.foam_block_cut_x
+        foam_block_hight_y = self.foam_block_cut_y
+        foam_block_hight_z = self.foam_block_cut_z
+
+        separation = self.cut_thickness
         # get object
         selected_object = bpy.context.active_object
         # get object dimensions
@@ -382,8 +399,8 @@ class funcs():
         dimensions_Y = dimensions.y
         dimensions_Z = dimensions.z   
 
-        self.create_cutter_planes(dimensions_X,dimensions_Y,dimensions_Z, scale = 1) 
-        self.create_woods(dimensions_X,dimensions_Y,dimensions_Z, scale = 1)
+        self.create_cutter_planes(dimensions_X,dimensions_Y,dimensions_Z,foam_block_hight_z,foam_block_hight_x,foam_block_hight_y,separation, scale = 1) 
+        self.create_woods(dimensions_X,dimensions_Y,dimensions_Z,foam_block_hight_z,foam_block_hight_x,foam_block_hight_y, separation, scale = 1)
        
         bpy.ops.object.select_all(action='DESELECT')              
 
@@ -396,6 +413,13 @@ class funcs():
         bpy.context.scene.cursor.location = saved_location
     
     def cut_object(self):
+
+        foam_size_X = self.foam_block_x
+        foam_size_Y = self.foam_block_y
+        foam_size_Z = self.foam_block_z
+
+        separation = self.cut_thickness
+
         selected_object = bpy.context.active_object
         # get object dimensions
         dimensions = selected_object.dimensions
@@ -457,7 +481,7 @@ class funcs():
         # Agregar la colección "Blocks" a la escena
         bpy.context.scene.collection.children.link(cut_blocks_collection) 
 
-        self.create_block_greed(dimensions_X,dimensions_Y,dimensions_Z, scale = 1)
+        self.create_block_greed(dimensions_X,dimensions_Y,dimensions_Z,foam_size_X, foam_size_Y, foam_size_Z, separation, scale = 1)
 
     def inner_part_verif(self):
         print('******inner_part_verif***********')
@@ -569,10 +593,13 @@ class funcs():
                     original_collection.objects.unlink(object_irregular_obj)
                     object_cube_obj.users_collection[0].objects.link(object_irregular_obj)
                     #bpy.context.scene.collection.children.link(blocks_collection)
+                
+                self.cut_wood(object_irregular_obj,'x')
+                self.cut_wood(object_irregular_obj,'y')
         except Exception as e:
             print("Error Custon Function, UNDO:", e)
             # UnDo in case of error
-            bpy.ops.ed.undo()
+            #bpy.ops.ed.undo()
     
     def draw_init(self):
         selected_object = bpy.context.active_object
@@ -662,54 +689,76 @@ class funcs():
             #foamcut_gpencil_curve.hide_select =  True
             bpy.context.scene.tool_settings.use_keyframe_insert_auto = False                
 
-    def write_to_file(self,verts,rotation_z_degrees,collection_name,update=False):
+    def write_to_file(self,verts,rotation_z_degrees,collection_name,update=False, wood=False):
         scale=1000
         i=0
-        pathFile=".\\"+collection_name+"\\"+collection_name+"."+'%03d' % i +"_samurai.nc"
+        if wood == 'X':
+            pathFileName=".\\"+collection_name+"\\"+collection_name+"_WX."
+        elif wood == 'Y':
+            pathFileName=".\\"+collection_name+"\\"+collection_name+"_WY."
+        else:
+            pathFileName=".\\"+collection_name+"\\"+collection_name+"."
+            
+        pathFileNumber=pathFileName+'%03d' % i +"_samurai.nc"
         #create .nc file 
         try:
             os.makedirs(".\\"+collection_name, exist_ok=True)  
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
-        while os.path.exists(pathFile):
+        while os.path.exists(pathFileNumber):
             i=i+1
-            pathFile=".\\"+collection_name+"\\"+collection_name+"."+'%03d' % i +"_samurai.nc"
+            pathFileNumber=pathFileName+'%03d' % i +"_samurai.nc"
         if update == True:
+            #if not wood:
             i=i-1
-            pathFile=".\\"+collection_name+"\\"+collection_name+"."+'%03d' % i +"_samurai.nc"
-        f = open(pathFile,"w+")
-        f.write(f'(BloqueXdesde_Blender)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
-        #direction will be form +X  to -X 
+            pathFileNumber=pathFileName+'%03d' % i +"_samurai.nc"
+        f = open(pathFileNumber,"w+")
+        f.write(f'(GCODE_from_Blender)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
+        
+        #direction will be form +X  to -X
+        x_first = verts[0].co.x
+        for i in range(0,len(verts)):
+            x=round((x_first - verts[i].co.x) * scale,2)
+            y=round(verts[i].co.y * scale,2)
+            z=round(verts[i].co.z * scale,2)
+            coorX=str('%.4f' % x)
+            coorY=str('%.4f' % y)
+            coorZ=str('%.4f' % z)
 
-        if verts[0].co.x < verts[len(verts)-1].co.x:
-            middle_x = (verts[len(verts)-1].co.x + verts[0].co.x) / 2
-            for i in reversed(range(0,len(verts))):
-                distance_to_middle = verts[i].co.x - middle_x
-                new_x = middle_x - distance_to_middle
-                x=(new_x - verts[len(verts)-1].co.x) * scale
-                y=verts[i].co.y * scale
-                z=verts[i].co.z * scale
-                coorX=str('%.4f' % x)
-                coorY=str('%.4f' % y)
-                coorZ=str('%.4f' % z)
-                #write in .nc file
-                f.write(f'G01X{coorX}Y{coorZ}A{rotation_z_degrees}\n')
-        else:
-            middle_x = (verts[len(verts)-1].co.x + verts[0].co.x) / 2
-            for i in range(0,len(verts)):
-                distance_to_middle = verts[i].co.x - middle_x
-                new_x = middle_x - distance_to_middle
-                x=(new_x - verts[len(verts)-1].co.x) * scale
-                y=verts[i].co.y * scale
-                z=verts[i].co.z * scale
-                coorX=str('%.4f' % x)
-                coorY=str('%.4f' % y)
-                coorZ=str('%.4f' % z)
-                #write in .nc file
-                f.write(f'G01X{coorX}Y{coorZ}A{rotation_z_degrees}\n') 
-        f.write(f'G01X2150Y1200A{rotation_z_degrees}\n') 
-        f.write(f'G01X0Y1200A{rotation_z_degrees}\n')
+            #write in .nc file
+            f.write(f'G01X{coorX}Y{coorZ}A{rotation_z_degrees}\n') 
+            #---------------write creasees if is a wood cut-------------------------
+            if i+1 < len(verts) and i > 0 and wood != False:
+                crease_width = 2
+                creases_up = ''
+                creases_down = ''
+                actual_vert_z = round(verts[i].co.z, 2)
+                next_vert_z   = round(verts[i+1].co.z, 2)
+                print(f'Vertice Z{i} : {actual_vert_z} == {next_vert_z} ?')
+                if  actual_vert_z == next_vert_z:
+                    width_wood=(round(verts[2].co.x,2) - round(verts[3].co.x,2))*scale
+                    crease_step=width_wood/4 #for 3 creases
+                    #print(f'vertex distance {i}:{verts[i].co.x} - {verts[i+1].co.x} = {width_wood}')
+                    for j in range(1,4):
+                        if round(verts[i].co.x,2) > round(verts[i+1].co.x,2):
+                            #crease 01
+                            creases_up =  (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
+                            creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{"%.4f" % (z+crease_width)}A{rotation_z_degrees}\n')
+                            creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{"%.4f" % (z+crease_width)}A{rotation_z_degrees}\n')
+                            creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
+                            f.write(creases_up)
+                        elif round(verts[i].co.x,2) < round(verts[i+1].co.x,2):            
+                            #crease 01
+                            creases_down =  (f'G01X{str("%.4f" % (x+(-j*crease_step+crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
+                            creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step+crease_width/2)))}Y{"%.4f" % (z-crease_width)}A{rotation_z_degrees}\n')
+                            creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step-crease_width/2)))}Y{"%.4f" % (z-crease_width)}A{rotation_z_degrees}\n')
+                            creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step-crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
+                            f.write(creases_down)
+
+        if x != 0:    
+            f.write(f'G01X2150Y1200A{rotation_z_degrees}\n') 
+            f.write(f'G01X0Y1200A{rotation_z_degrees}\n')
         f.write(f'(Zigzag)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
 
     def reorder_vertices(self, iniver):
@@ -757,8 +806,8 @@ class funcs():
 
         print('---'+objects_cube[0].name+'--------------------------------------------')
 
-        #--create bool to cut the foamBlock with gpencil mesh
-        #hide gpencil
+        #--create bool to cut the foamBlock with silhouette mesh
+        #hide silhouette
         silhouette_selected.hide_select =  True
         silhouette_selected.select_set(False) # deselect to evade errors
         bpy.context.view_layer.objects.active = objects_cube[0]
@@ -783,7 +832,7 @@ class funcs():
 
         # Get the selected object
         selected_object = bpy.context.active_object
-        # Get the collee object
+        # Get the object collection 
         object_collection = selected_object.users_collection[0]
 
         # Move the 3D cursor below the selected object by the CNC_margin amount
@@ -885,7 +934,7 @@ class funcs():
         # Dissolve vertices within a certain angle limit
         bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(5), verts=bm.verts)
 
-        #----------------------Reorder vertices----------------------------
+        #----------------------Reorder vertex----------------------------
         bm.verts.ensure_lookup_table()
 
         # Index of the start vertex
@@ -1011,7 +1060,139 @@ class funcs():
         silhouette.location.y = -1.5
         self.cut_foam()
 
+    def cut_wood(self, selected_obj=False, wood_axis='x'):
+        #identify and choose collection union
+        print('CUT_WOOD--START')
+        if selected_obj:
+            print(f'-------seleccionado activo--------{selected_obj.name}')            
+            irreg_obj_selected = selected_obj
+        else:
+            irreg_obj_selected = bpy.context.active_object              
+        silhouette_coll = irreg_obj_selected.users_collection[0]
+        object_collection = bpy.data.collections[silhouette_coll.name]
 
+        # create a list requiring both objects selected and in chosen collection
+        objects_cube = [object for object in object_collection.objects if object.name.startswith(f"foamBlock.")]
+
+        margen_max_cnc=1.137
+        margen_min_cnc=1.013
+
+        loc_x, loc_y, loc_z = objects_cube[0].location
+       
+        # Set the origin of the silhouette cutter to the center of mass        
+        bpy.context.scene.cursor.location = (loc_x, loc_y, loc_z) 
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+
+        # Create a second plane to serve as the silhouette cutter
+        distance_to_plane=0.025
+        bpy.ops.mesh.primitive_plane_add(size=2)
+        silhouette_wood = bpy.context.object
+        silhouette_wood.name = "siluete_wood_"+wood_axis+".001"
+        if wood_axis == 'y':
+            silhouette_wood.scale.y = 0.5
+            silhouette_wood.rotation_euler = (0, math.radians(90), 0)
+            distance_to_plane=0
+        else:
+            silhouette_wood.rotation_euler = (math.radians(90), 0, 0)
+        silhouette_wood.location.y=objects_cube[0].location.y+distance_to_plane
+        bpy.ops.object.transform_apply(scale=True,location=False)
+        
+        #change silhouette collection to actual collection.    
+        siluete_collection = silhouette_wood.users_collection[0]
+        siluete_collection.objects.unlink(silhouette_wood)
+        object_collection.objects.link(silhouette_wood)
+        bpy.context.view_layer.objects.active = silhouette_wood        
+
+        # Add a Boolean modifier to intersect the silhouette cutter with the projected plane
+        Boolean_01 = silhouette_wood.modifiers.new(name="Boolean_01", type='BOOLEAN')
+        Boolean_01.operation = 'INTERSECT'
+        Boolean_01.solver = 'EXACT'
+        Boolean_01.object = bpy.data.objects['innerWood_'+wood_axis+'.001']
+        
+        # Apply the Boolean modifier to create the silhouette
+        bpy.ops.object.modifier_apply(modifier=Boolean_01.name)
+        if wood_axis == 'y':
+            silhouette_wood.rotation_euler = (0, 0, math.radians(90))
+            bpy.ops.object.transform_apply(rotation=True,location=False)            
+        #---------------------------edit sluete------------------
+        # Select the plane object
+        obj = bpy.context.active_object
+
+        # Make sure you're in Edit Mode
+        bpy.ops.object.mode_set(mode='EDIT')
+        # Change back to Vertex selection mode
+        bpy.ops.mesh.select_mode(type="VERT")
+        bpy.ops.mesh.select_all(action = 'DESELECT')
+
+        # Create a new bmesh from the mesh data
+        bm = bmesh.from_edit_mesh(obj.data)
+
+        # Deselect all vertices
+        for v in bm.verts:
+            v.select = False
+
+        # Find the lowest Z coordinate among all vertices
+        lowest_z = min(v.co.z for v in bm.verts)
+
+
+        indices_in_z = []
+
+        # Select the vertices that have the lowest Z coordinate
+        lowest_z_vertices = [v for v in bm.verts if v.co.z == lowest_z]
+        for v in lowest_z_vertices:
+            v.select = True
+            indices_in_z.append(v.index)
+
+        # Find the vertex with the minimum X coordinate among the selected vertices
+        min_x_vertex = min(lowest_z_vertices, key=lambda v: v.co.x)
+
+        # Find the vertex with the maximum X coordinate among the selected vertices
+        max_x_vertex = max(lowest_z_vertices, key=lambda v: v.co.x)
+
+        for e in bm.edges:
+            if e.verts[0].index in indices_in_z and e.verts[1].index in indices_in_z:
+                e.select = True
+                break
+
+        # Change to Edge selection mode
+        bpy.ops.mesh.select_mode(type="EDGE")
+
+        # Elimina los bordes seleccionados
+        bpy.ops.mesh.delete(type='EDGE')
+
+        # Change back to Vertex selection mode
+        bpy.ops.mesh.select_mode(type="VERT")
+        
+        #get global coords
+        max_x_vertex_world = obj.matrix_world @ max_x_vertex.co
+        
+        ##-------Extrude to the limits of the CNC---------
+        # Extrude the minimum X vertex -2 in the X direction
+        #newvert = bm.verts.new((-margen_min_cnc, min_x_vertex.co.y, max_x_vertex_world[2]))        
+        newvert = bm.verts.new((margen_max_cnc, max_x_vertex.co.y, max_x_vertex_world[2]))
+        newedge = bm.edges.new([min_x_vertex, newvert])
+        indices_min=indices_in_z[1]+1
+        # Extrude the maximum X vertex +2 in the X direction
+        newvert = bm.verts.new((margen_max_cnc, max_x_vertex.co.y, max_x_vertex_world[2]))
+        newedge = bm.edges.new([max_x_vertex, newvert])
+        indices_max=len(bm.verts)-1
+           
+        self.reorder_vertices(indices_max)
+        # Update the bmesh and exit Edit Mode
+        verts=silhouette_wood.data.vertices
+        bmesh.update_edit_mesh(obj.data)
+        bpy.ops.object.mode_set(mode='OBJECT')
+        
+        bpy.context.scene.cursor.location = (loc_x, loc_y, loc_z)
+        
+        if wood_axis == 'x':
+            self.write_to_file(verts,0,silhouette_wood.users_collection[0].name,True,'X')
+        elif wood_axis == 'y':            
+            self.write_to_file(verts,90,silhouette_wood.users_collection[0].name,True,'Y')
+        #delete silhouette
+        bpy.data.objects.remove(silhouette_wood, do_unlink=True)
+        print('CUT_WOOD--END') 
+        
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
 class BUTTOM_CUSTOM01(bpy.types.Operator):
@@ -1051,8 +1232,9 @@ class BUTTOM_CUSTOM03(bpy.types.Operator):
     def execute(self, context):
         
         funcion = funcs()
+        #funcion.cut_wood()
         funcion.create_silhouette()
-        
+
         print("execute button03 custom ok!")
 
         return {'FINISHED'}
