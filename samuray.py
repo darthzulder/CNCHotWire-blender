@@ -13,7 +13,7 @@ class funcs():
 
     foam_block_x = 1.410
     foam_block_y = 0.980
-    foam_block_z = 1.180
+    foam_block_z = 1.180/2
 
     cut_thickness = 0.02
 
@@ -270,7 +270,7 @@ class funcs():
         array_modifier_Z2.thickness = plane_thickness
 
     def crate_cnc_area (self, object_scope, scale = 1):
-        print(f"-------crate_cnc_area>{dir}")
+        #print(f"-------create_cnc_area>{dir}")
         
         cnc_size_X = 2.150
         cnc_size_Y = 2.095
@@ -380,7 +380,7 @@ class funcs():
         bpy.ops.object.modifier_apply(modifier=array_modifier_X1.name)
 
     def crate_around_object (self, scale = 1):
-        print(f"-------crate_around_object>{dir}")
+        #print(f"-------crate_around_object>{dir}")
         # store the location of current 3d cursor
         saved_location = bpy.context.scene.cursor.location.xyz   # returns a vector
         
@@ -483,7 +483,7 @@ class funcs():
 
         self.create_block_greed(dimensions_X,dimensions_Y,dimensions_Z,foam_size_X, foam_size_Y, foam_size_Z, separation, scale = 1)
 
-    def inner_part_verif(self):
+    def cut_and_order_parts(self):
         print('******inner_part_verif***********')
         #save state in case of error
         bpy.ops.ed.undo_push(message="inner_part_verif Function")
@@ -506,26 +506,31 @@ class funcs():
                 
             for object_cube in objects_cube:
                 # # Get the world coordinates bounding-box-points of object_cube
-                bbox_cube = [['%.2f' % elem for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
+                bbox_cube = [['%.4f' % elem for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
                 have_something_inside = 0
                 # Check if each irregular object is contained within any cube object
                 for object_irregular in objects_irregular:
                     # Get the world coordinates of the bounding-box-points of object_irregular
-                    bbox_irregular = [ ['%.2f' % elem for elem in object_irregular.matrix_world @ Vector(coor)] for coor in object_irregular.bound_box]
+                    bbox_irregular = [ ['%.4f' % elem for elem in object_irregular.matrix_world @ Vector(coor)] for coor in object_irregular.bound_box]
 
                     # # Check if the bounding box of the irregular object is contained within the bounding box of the cube object
                     is_inside = all(
-                        bbox_cube[0][i] <= bbox_irregular[0][i] <= bbox_cube[6][i] and
-                        bbox_cube[0][i] <= bbox_irregular[6][i] <= bbox_cube[6][i]
+                        float(bbox_cube[0][i]) <= float(bbox_irregular[0][i]) <= float(bbox_cube[6][i]) and
+                        float(bbox_cube[0][i]) <= float(bbox_irregular[6][i]) <= float(bbox_cube[6][i])
                         for i in range(3)
                     )                    
                                     
                     if is_inside:
                         relation_cube_irregular[object_irregular.name] = object_cube.name
                         have_something_inside = 1
-                        for i in range (3):                        
-                            print(f'c0|{i}:{bbox_cube[0][i]} <= i{i}|{i}:{bbox_irregular[i][i]} <= c6|{i}:{bbox_cube[6][i]}//c0|{i}:{bbox_cube[0][i]} <= i7|{i}:{bbox_irregular[7][i]} <= c6|{i}:{bbox_cube[6][i]}')
-                        print('=========')
+                        #print(f'===={object_irregular.name} - {object_cube.name}=====')
+                        #for i in range (3):                        
+                            #print(f'c0|{i}:{bbox_cube[0][i]} <= i{i}|{i}:{bbox_irregular[i][i]} <= c6|{i}:{bbox_cube[6][i]}//c0|{i}:{bbox_cube[0][i]} <= i7|{i}:{bbox_irregular[7][i]} <= c6|{i}:{bbox_cube[6][i]}')
+                    #if object_irregular.name == 'irregObjPart.038' and object_cube.name == 'foamBlock.113':
+                    #    print(f'-----------------====[{have_something_inside}]--{object_irregular.name} - {object_cube.name}=====')
+                    #    for i in range (3):                        
+                    #        print(f'[{float(bbox_cube[0][i]) <= float(bbox_irregular[0][i]) <= float(bbox_cube[6][i])}] and [{float(bbox_cube[0][i]) <= float(bbox_irregular[6][i]) <= float(bbox_cube[6][i])}] - c0  |{i}:{bbox_cube[0][i]} <= i0|{i}:{bbox_irregular[0][i]} <= c6|{i}:{bbox_cube[6][i]}//c0|{i}:{bbox_cube[0][i]} <= i6|{i}:{bbox_irregular[6][i]} <= c6|{i}:{bbox_cube[6][i]}')
+                        
                         #break
                 #Delete cube if don't have nothing inside            
                 if have_something_inside == 0:
@@ -735,7 +740,7 @@ class funcs():
                 creases_down = ''
                 actual_vert_z = round(verts[i].co.z, 2)
                 next_vert_z   = round(verts[i+1].co.z, 2)
-                print(f'Vertice Z{i} : {actual_vert_z} == {next_vert_z} ?')
+                #print(f'Vertex Z{i} : {actual_vert_z} == {next_vert_z} ?')
                 if  actual_vert_z == next_vert_z:
                     width_wood=(round(verts[2].co.x,2) - round(verts[3].co.x,2))*scale
                     crease_step=width_wood/4 #for 3 creases
@@ -769,11 +774,11 @@ class funcs():
 
         # index of the start vertex SELECT the specific vertex
         initial = bm.verts[iniver]
-        print(f'inivert-->{iniver}')
+        #print(f'inivert-->{iniver}')
         vert = initial
         visited_verts = set()
         for i in range(len(bm.verts)):
-            print(f'reorder--{vert.index, i}')
+            #print(f'reorder--{vert.index, i}')
             vert.index = i
             next = None
             for edge in vert.link_edges:
@@ -1062,9 +1067,9 @@ class funcs():
 
     def cut_wood(self, selected_obj=False, wood_axis='x'):
         #identify and choose collection union
-        print('CUT_WOOD--START')
+        #print('CUT_WOOD--START')
         if selected_obj:
-            print(f'-------seleccionado activo--------{selected_obj.name}')            
+            #print(f'-------seleccionado activo--------{selected_obj.name}')            
             irreg_obj_selected = selected_obj
         else:
             irreg_obj_selected = bpy.context.active_object              
@@ -1191,7 +1196,7 @@ class funcs():
             self.write_to_file(verts,90,silhouette_wood.users_collection[0].name,True,'Y')
         #delete silhouette
         bpy.data.objects.remove(silhouette_wood, do_unlink=True)
-        print('CUT_WOOD--END') 
+        #print('CUT_WOOD--END') 
         
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
@@ -1216,7 +1221,7 @@ class BUTTOM_CUSTOM02(bpy.types.Operator):
     def execute(self, context):
         
         funcion = funcs()
-        funcion.inner_part_verif()
+        funcion.cut_and_order_parts()
         
         print("execute button02 custom ok!")
 
