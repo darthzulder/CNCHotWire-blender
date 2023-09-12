@@ -722,11 +722,11 @@ class funcs():
         f.write(f'(GCODE_from_Blender)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
         
         #direction will be form +X  to -X
-        x_first = verts[0].co.x
+        x_first = verts[0]['x']
         for i in range(0,len(verts)):
-            x=round((x_first - verts[i].co.x) * scale,2)
-            y=round(verts[i].co.y * scale,2)
-            z=round(verts[i].co.z * scale,2)
+            x=round((x_first - verts[i]['x']) * scale,2)
+            y=round(verts[i]['y'] * scale,2)
+            z=round(verts[i]['z'] * scale,2)
             coorX=str('%.4f' % x)
             coorY=str('%.4f' % y)
             coorZ=str('%.4f' % z)
@@ -738,22 +738,22 @@ class funcs():
                 crease_width = 2
                 creases_up = ''
                 creases_down = ''
-                actual_vert_z = round(verts[i].co.z, 2)
-                next_vert_z   = round(verts[i+1].co.z, 2)
+                actual_vert_z = round(verts[i]['z'], 2)
+                next_vert_z   = round(verts[i+1]['z'], 2)
                 #print(f'Vertex Z{i} : {actual_vert_z} == {next_vert_z} ?')
                 if  actual_vert_z == next_vert_z:
-                    width_wood=(round(verts[2].co.x,2) - round(verts[3].co.x,2))*scale
+                    width_wood=(round(verts[2]['x'],2) - round(verts[3]['x'],2))*scale
                     crease_step=width_wood/4 #for 3 creases
                     #print(f'vertex distance {i}:{verts[i].co.x} - {verts[i+1].co.x} = {width_wood}')
                     for j in range(1,4):
-                        if round(verts[i].co.x,2) > round(verts[i+1].co.x,2):
+                        if round(verts[i]['x'],2) > round(verts[i+1]['x'],2):
                             #crease 01
                             creases_up =  (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
                             creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{"%.4f" % (z+crease_width)}A{rotation_z_degrees}\n')
                             creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{"%.4f" % (z+crease_width)}A{rotation_z_degrees}\n')
                             creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
                             f.write(creases_up)
-                        elif round(verts[i].co.x,2) < round(verts[i+1].co.x,2):            
+                        elif round(verts[i]['x'],2) < round(verts[i+1]['x'],2):            
                             #crease 01
                             creases_down =  (f'G01X{str("%.4f" % (x+(-j*crease_step+crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
                             creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step+crease_width/2)))}Y{"%.4f" % (z-crease_width)}A{rotation_z_degrees}\n')
@@ -1042,9 +1042,9 @@ class funcs():
 
     def cut_silhouette(self, loc_z, update=False):
         
-        selected_silhouette = bpy.context.selected_objects[0]
+        selected_object = bpy.context.selected_objects[0]
         #get colection name
-        collection_name = selected_silhouette.users_collection[0].name
+        collection_name = selected_object.users_collection[0].name
         #get irregular object
         irregular_obj = [obj for obj in bpy.data.objects if obj.name.startswith("irregObjPart.") and collection_name in obj.users_collection[0].name]
         
@@ -1056,10 +1056,45 @@ class funcs():
         else:
             print("No related objects found in the same collection.")
                 
-        verts = selected_silhouette.data.vertices
+        verts = selected_object.data.vertices
 
-        #export to a *.nc file
-        self.write_to_file(verts,rotation_z_degrees,collection_name,update)
+
+        if not('customVar' in irregular_obj[0]):
+            custom_list = []
+            irregular_obj[0]['customVar'] = custom_list
+            #print('---LISTA NO EXISTE antes----')
+            #print(irregular_obj[0]['customVar'])
+        else:
+            custom_list = irregular_obj[0]['customVar']
+            #print('---LISTA EXISTEantes----')
+            #print(irregular_obj[0]['customVar'])            
+            
+        # Extract the vertex coordinates from the verts list
+        vertex_coordinates = [{'x':v.co.x, 'y':v.co.y, 'z':v.co.z} for v in verts]
+
+        gcode_dict = dict()
+        gcode_dict = { 'collection_name': collection_name, 
+                       'selected_silhouette.name':selected_object.name,
+                       'vertex_list' : vertex_coordinates, 
+                       'rotation_z'  : rotation_z_degrees,                 
+                     }
+        
+        '''print('---LISTA antes----')
+        print(irregular_obj[0]['customVar'][0]['collection_name'])
+        print('---INDEX----')'''
+        #print(len(irregular_obj[0]['customVar']))
+        
+        if update == False:
+            #custom_list.append('gcode_dict-NUEVO')
+            custom_list.append(gcode_dict)
+        elif update == True:
+            #custom_list.append('gcode_dict-UPDATE')
+            custom_list.append(gcode_dict)
+        
+        irregular_obj[0]['customVar'] = custom_list
+
+        #-------export to a *.nc file-------
+        #self.write_to_file(vertex_coordinates,rotation_z_degrees,collection_name,update)
         silhouette = bpy.context.object
         silhouette.location.z = loc_z
         silhouette.location.y = -1.5
@@ -1083,7 +1118,7 @@ class funcs():
         margen_min_cnc=1.013
 
         loc_x, loc_y, loc_z = objects_cube[0].location
-       
+        
         # Set the origin of the silhouette cutter to the center of mass        
         bpy.context.scene.cursor.location = (loc_x, loc_y, loc_z) 
         bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
@@ -1190,14 +1225,75 @@ class funcs():
         
         bpy.context.scene.cursor.location = (loc_x, loc_y, loc_z)
         
+        # Extract the vertex coordinates from the verts list
+        vertex_coordinates = [{'x':v.co.x, 'y':v.co.y, 'z':v.co.z} for v in verts]
+
         if wood_axis == 'x':
-            self.write_to_file(verts,0,silhouette_wood.users_collection[0].name,True,'X')
+            self.write_to_file(vertex_coordinates,0,silhouette_wood.users_collection[0].name,True,'X')
         elif wood_axis == 'y':            
-            self.write_to_file(verts,90,silhouette_wood.users_collection[0].name,True,'Y')
+            self.write_to_file(vertex_coordinates,90,silhouette_wood.users_collection[0].name,True,'Y')
         #delete silhouette
         bpy.data.objects.remove(silhouette_wood, do_unlink=True)
         #print('CUT_WOOD--END') 
+
+    def export_gcode(self):
+        selected_object = bpy.context.selected_objects[0]
+        #get colection name
+        collection_name = selected_object.users_collection[0].name
+        #get irregular object
+        irregular_obj = [obj for obj in bpy.data.objects if obj.name.startswith("irregObjPart.") and collection_name in obj.users_collection[0].name]        
         
+        for gcode_dict in irregular_obj[0]['customVar']:
+            collection_name = gcode_dict['collection_name']
+            verts = gcode_dict['vertex_list']
+            rotation_z_degrees = gcode_dict['rotation_z']
+
+            print(f'collection===>{collection_name}')
+
+            #----create GCODE file
+            self.write_to_file(verts,rotation_z_degrees,collection_name)
+
+        irregular_obj[0].rotation_euler.z = math.radians(0)
+        self.export_to_stl(collection_name)
+
+    def export_to_stl(self,collection_name):
+        scale_for_powermill=1000
+
+        output_path=".\\"+collection_name+"\\"+collection_name+".stl"
+        #get foamBlock object
+        foamBlock = [obj for obj in bpy.data.objects if obj.name.startswith("foamBlock.") and collection_name in obj.users_collection[0].name]
+
+        bpy.ops.object.select_all(action='DESELECT')
+
+        foamBlock[0].hide_select = False
+
+        foamBlock[0].select_set(True)
+        bpy.context.view_layer.objects.active = foamBlock[0]
+
+        location_ini = foamBlock[0].copy()
+        foamBlock[0].location.x = 0
+        foamBlock[0].location.y = 0
+        foamBlock[0].location.z = 0
+        # go edit mode
+        bpy.ops.object.mode_set(mode='EDIT')
+        # select al faces
+        bpy.ops.mesh.select_all(action='SELECT')
+        # recalculate outside normals 
+        bpy.ops.mesh.normals_make_consistent(inside=False)
+        # go object mode again
+        bpy.ops.object.editmode_toggle()
+
+
+        # Export the object as STL
+        bpy.ops.export_mesh.stl(filepath=output_path, use_selection=True, check_existing=False,global_scale = scale_for_powermill)
+
+        foamBlock[0].location.x = location_ini.location.x
+        foamBlock[0].location.y = location_ini.location.y
+        foamBlock[0].location.z = location_ini.location.z
+
+        bpy.ops.object.select_all(action='DESELECT')
+        foamBlock[0].hide_select = True
+
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
 class BUTTOM_CUSTOM01(bpy.types.Operator):
@@ -1281,7 +1377,20 @@ class BUTTOM_CUSTOM04(bpy.types.Operator):
 
         return {'FINISHED'}
     
-    
+class BUTTOM_CUSTOM05(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM05_CutFoam"
+    bl_idname = "object.button_custom05"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        
+        funcion = funcs()
+        funcion.export_gcode()
+
+        print("execute button05 custom ok!")
+
+        return {'FINISHED'}
+        
 # PANEL UI (PART 1 DRAW)
 ####################################################
 
@@ -1343,6 +1452,15 @@ class PANEL_CUSTOM_UI_02(bpy.types.Panel):
         row01.scale_y = 2
         row01.operator("object.button_custom04", text= "Cut silhouette", icon = "SCULPTMODE_HLT")
 
+        #create simple row
+        row01 = layout.row()
+        row01.label(text = "Second Step")
+
+        # add button custom
+        row01 = layout.row()
+        row01.scale_y = 2
+        row01.operator("object.button_custom05", text= "Export GCODE and RawForm")
+
 # REGISTER (PART 2)
 ####################################################
 def register():
@@ -1352,6 +1470,7 @@ def register():
     bpy.utils.register_class(BUTTOM_CUSTOM02)
     bpy.utils.register_class(BUTTOM_CUSTOM03)
     bpy.utils.register_class(BUTTOM_CUSTOM04)
+    bpy.utils.register_class(BUTTOM_CUSTOM05)
 
 def unregister():
     bpy.utils.unregister_class(PANEL_CUSTOM_UI_01)
@@ -1360,6 +1479,7 @@ def unregister():
     bpy.utils.unregister_class(BUTTOM_CUSTOM02)
     bpy.utils.unregister_class(BUTTOM_CUSTOM03)
     bpy.utils.unregister_class(BUTTOM_CUSTOM04)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM05)
 
 if __name__ == "__main__":
     register()
