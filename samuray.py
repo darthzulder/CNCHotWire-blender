@@ -601,6 +601,10 @@ class funcs():
                 
                 self.cut_wood(object_irregular_obj,'x')
                 self.cut_wood(object_irregular_obj,'y')
+                #----create STL file of irregular object
+                collection_name = object_irregular_obj.users_collection[0].name
+                self.export_to_stl_origin(collection_name,collection_name,"irregObjPart.")
+
         except Exception as e:
             print("Error Custon Function, UNDO:", e)
             # UnDo in case of error
@@ -1234,7 +1238,7 @@ class funcs():
             self.write_to_file(vertex_coordinates,90,silhouette_wood.users_collection[0].name,True,'Y')
         #delete silhouette
         bpy.data.objects.remove(silhouette_wood, do_unlink=True)
-        #print('CUT_WOOD--END') 
+        #print('CUT_WOOD--END')
 
     def export_gcode(self):
         selected_object = bpy.context.selected_objects[0]
@@ -1252,28 +1256,34 @@ class funcs():
 
             #----create GCODE file
             self.write_to_file(verts,rotation_z_degrees,collection_name)
-
+        #reset rotation of irregular object
         irregular_obj[0].rotation_euler.z = math.radians(0)
-        self.export_to_stl(collection_name)
 
-    def export_to_stl(self,collection_name):
+        self.export_to_stl_origin(collection_name,collection_name+'_raw',"foamBlock.")
+
+    def export_to_stl_origin(self,collection_name,stl_name,obj_name_base):
         scale_for_powermill=1000
 
-        output_path=".\\"+collection_name+"\\"+collection_name+".stl"
+        output_path=".\\"+collection_name+"\\"+stl_name+".stl"
         #get foamBlock object
-        foamBlock = [obj for obj in bpy.data.objects if obj.name.startswith("foamBlock.") and collection_name in obj.users_collection[0].name]
+        objective_object = [obj for obj in bpy.data.objects if obj.name.startswith(obj_name_base) and collection_name in obj.users_collection[0].name]
 
         bpy.ops.object.select_all(action='DESELECT')
 
-        foamBlock[0].hide_select = False
+        objective_object[0].hide_select = False
 
-        foamBlock[0].select_set(True)
-        bpy.context.view_layer.objects.active = foamBlock[0]
+        objective_object[0].select_set(True)
+        bpy.context.view_layer.objects.active = objective_object[0]
 
-        location_ini = foamBlock[0].copy()
-        foamBlock[0].location.x = 0
-        foamBlock[0].location.y = 0
-        foamBlock[0].location.z = 0
+        # save location
+        location_ini_x = objective_object[0].location.x
+        location_ini_y = objective_object[0].location.y
+        location_ini_z = objective_object[0].location.z
+
+        objective_object[0].location.x = 0
+        objective_object[0].location.y = 0
+        objective_object[0].location.z = 0
+
         # go edit mode
         bpy.ops.object.mode_set(mode='EDIT')
         # select al faces
@@ -1287,12 +1297,13 @@ class funcs():
         # Export the object as STL
         bpy.ops.export_mesh.stl(filepath=output_path, use_selection=True, check_existing=False,global_scale = scale_for_powermill)
 
-        foamBlock[0].location.x = location_ini.location.x
-        foamBlock[0].location.y = location_ini.location.y
-        foamBlock[0].location.z = location_ini.location.z
-
+        # load location
+        objective_object[0].location.x = location_ini_x
+        objective_object[0].location.y = location_ini_y
+        objective_object[0].location.z = location_ini_z
+        if not (objective_object[0].name.startswith("irregObjPart.")):
+            objective_object[0].hide_select = True
         bpy.ops.object.select_all(action='DESELECT')
-        foamBlock[0].hide_select = True
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
@@ -1459,7 +1470,7 @@ class PANEL_CUSTOM_UI_02(bpy.types.Panel):
         # add button custom
         row01 = layout.row()
         row01.scale_y = 2
-        row01.operator("object.button_custom05", text= "Export GCODE and RawForm")
+        row01.operator("object.button_custom05", text= "Export GCODE and RawForm", icon = "FILE_TICK")
 
 # REGISTER (PART 2)
 ####################################################
