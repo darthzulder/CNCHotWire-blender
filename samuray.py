@@ -1,28 +1,48 @@
+# ADD-ON
+####################################################
+
+bl_info = {
+    "name": "CNC HotWire Preparetion",
+    "description": "Change origin Position ",
+    "author": "nbravo",
+    "version": (1, 1),
+    "blender": (2, 93, 1),
+    "location": "View3D > UI",
+    "warning":"(in ALFA production)",
+    "doc_url":"",
+    "category": "User"
+}
+
 import bpy
 import bmesh
 import math
 from mathutils import Vector
 #from . import funcs
 import os, errno
-dir = os.path.dirname(bpy.data.filepath)
-print(f"------->{dir}")
+#dir = os.path.dirname(bpy.data.filepath)
+#print(f"------->{dir}")
 #funcs = bpy.data.texts["funcs.py"].as_module()
 
 #Funciones
 class funcs():
 
+    # meters
     foam_block_x = 1.410
     foam_block_y = 0.980
-    foam_block_z = 1.180/2
+    foam_block_z = 1.180
 
     cut_thickness = 0.02
+
+    wood_total_heigh = 0.042 + 8/1000
+    wood_total_width = 0.141 + 8/1000
+    wood_total_depth = 4.347
 
     foam_block_cut_x = foam_block_x + cut_thickness
     foam_block_cut_y = foam_block_y + cut_thickness
     foam_block_cut_z = foam_block_z
     
     def change_origin (self):
-        print(f"-------change_origin>{dir}")
+        #print(f"-------change_origin>{dir}")
         # store the location of current 3d cursor
         saved_location = bpy.context.scene.cursor.location.xyz   # returns a vector
         
@@ -90,7 +110,7 @@ class funcs():
         bpy.context.scene.cursor.location = saved_location
 
     def create_block_greed (self, dimensions_X, dimensions_Y, dimensions_Z, foam_size_X, foam_size_Y, foam_size_Z, separation , scale = 1):
-        print(f"-------create_block_greed>{dir}")
+        #print(f"-------create_block_greed>{dir}")
         # IN METERS
         n_blocks_x = math.ceil(dimensions_X/foam_size_X)
         n_blocks_y = math.ceil(dimensions_Y/foam_size_Y)
@@ -139,7 +159,8 @@ class funcs():
             array_modifier3.count = n_blocks_z  # Número de repeticiones
             array_modifier3.relative_offset_displace = (0.0, 0.0, 1.0)  # Desplazamiento relativo
             array_modifier3.use_constant_offset = True  # Usar desplazamiento constante
-            array_modifier3.constant_offset_displace = (0.0, 0.0, separation*scale)  # Desplazamiento constante
+            #array_modifier3.constant_offset_displace = (0.0, 0.0, separation*scale)  # Desplazamiento constante
+            array_modifier3.constant_offset_displace = (0.0, 0.0, 0.002*scale)  # Desplazamiento constante
             bpy.ops.object.modifier_apply(modifier=array_modifier3.name)
 
         # Aplicar el modificador
@@ -180,6 +201,8 @@ class funcs():
     def create_cutter_planes (self, dimensions_X,dimensions_Y, dimensions_Z, separation_z, separation_x, separation_y,  plane_thickness, scale = 1):               
 
         plane_size_high = (dimensions_Z+0.5)
+        #division_hight_z = plane_thickness
+        division_hight_z = 0.002
 
         faces_count_x = math.ceil(dimensions_X/separation_x)+1 
         faces_count_y = math.ceil(dimensions_Y/separation_y)+1 
@@ -247,7 +270,8 @@ class funcs():
 
         # -----create primitive Plane as cutterPlane --Cuts in Z--
         # change cursor location
-        bpy.context.scene.cursor.location =(location_x,location_y,separation_z+plane_thickness/2)
+        #bpy.context.scene.cursor.location =(location_x,location_y,separation_z+plane_thickness/2)
+        bpy.context.scene.cursor.location =(location_x,location_y,separation_z + division_hight_z/2)
         bpy.ops.mesh.primitive_plane_add(size=scale)
         cutterPlane_Z = bpy.context.object
         cutterPlane_Z.name = "cutterPlane.003"
@@ -263,11 +287,12 @@ class funcs():
         array_modifier_Z1.count = faces_count_z  # Número de repeticiones
         array_modifier_Z1.relative_offset_displace = (0.0, 0.0, 1.0)  # Desplazamiento relativo
         array_modifier_Z1.use_constant_offset = True  # Usar desplazamiento constante
-        array_modifier_Z1.constant_offset_displace = (0.0, 0.0, separation_z+plane_thickness/2)  # Desplazamiento constante
+        array_modifier_Z1.constant_offset_displace = (0.0, 0.0, separation_z + division_hight_z/2)  # Desplazamiento constante
 
         # Definir las propiedades del modificador
         array_modifier_Z2.offset = 0
-        array_modifier_Z2.thickness = plane_thickness
+        #array_modifier_Z2.thickness = plane_thickness
+        array_modifier_Z2.thickness = division_hight_z    
 
     def crate_cnc_area (self, object_scope, scale = 1):
         #print(f"-------create_cnc_area>{dir}")
@@ -333,9 +358,9 @@ class funcs():
         location_y = (dim_plane_y-2)/2
         location_z = (plane_size_high-0.5)/2
 
-        wood_heigh = 0.050
-        wood_width = 0.152
-        wood_depth = 4.347
+        wood_heigh = self.wood_total_heigh
+        wood_width = self.wood_total_width
+        wood_depth = self.wood_total_depth
         
         # -----create primitive Plane as cutterPlane --Cuts in X--
         # change cursor location
@@ -358,12 +383,12 @@ class funcs():
 
         # -----create primitive Plane as cutterPlane --Cuts in Y--
         # change cursor location
-        bpy.context.scene.cursor.location =(location_x,separation_y/2,location_z-wood_heigh)
+        bpy.context.scene.cursor.location =(location_x,separation_y/2,location_z-wood_heigh/2-wood_width/2)
         bpy.ops.mesh.primitive_cube_add(size=scale)
         cutterWood_Y = bpy.context.object
         cutterWood_Y.name = "innerWood_y.001"
         cutterWood_Y.dimensions = (dim_plane_x, wood_width, wood_heigh)
-        #cutterPlane_Y.rotation_euler = (math.radians(90),0,0)
+        cutterWood_Y.rotation_euler = (math.radians(90),0,0)
         bpy.ops.object.transform_apply(scale=True)
 
         # Add array modifier
@@ -373,7 +398,7 @@ class funcs():
         array_modifier_Y1.count = faces_count_y  # count number
         array_modifier_Y1.relative_offset_displace = (0.0, 1.0, 0.0)  # Relative Offset
         array_modifier_Y1.use_constant_offset = True  # Use constant offset
-        array_modifier_Y1.constant_offset_displace = (0.0, (separation_y-wood_width)*scale, 0.0)  # Constant offset displace
+        array_modifier_Y1.constant_offset_displace = (0.0, (separation_y-wood_heigh)*scale, 0.0)  # Constant offset displace
         
         # Apply modifiers
         bpy.ops.object.modifier_apply(modifier=array_modifier_Y1.name)
@@ -487,126 +512,126 @@ class funcs():
         print('******inner_part_verif***********')
         #save state in case of error
         bpy.ops.ed.undo_push(message="inner_part_verif Function")
-        try:
-            collections_name = "P"
-            cubes_name = "foamBlock"
-            object_selected_name = "irregObjPart"
-            bpy.context.active_object.name = f"{object_selected_name}.001"
-            #fix location in z to pass the inner verification, if z location is 0 may have conflict to check if is inside the cube due the cube Z location is 0
-            if bpy.context.active_object.location.z == 0: bpy.context.active_object.location.z=+0.0001
+        #try:
+        collections_name = "P"
+        cubes_name = "foamBlock"
+        object_selected_name = "irregObjPart"
+        bpy.context.active_object.name = f"{object_selected_name}.001"
+        #fix location in z to pass the inner verification, if z location is 0 may have conflict to check if is inside the cube due the cube Z location is 0
+        if bpy.context.active_object.location.z == 0: bpy.context.active_object.location.z=+0.0001
 
-            self.cut_object()
-            # Get a list of all cube objects and irregular objects in the scene
-            objects_cube      = [object for object in bpy.data.objects if object.name.startswith(f"{cubes_name}.")]
-            objects_irregular = [object for object in bpy.data.objects if object.name.startswith(f"{object_selected_name}.")]
+        self.cut_object()
+        # Get a list of all cube objects and irregular objects in the scene
+        objects_cube      = [object for object in bpy.data.objects if object.name.startswith(f"{cubes_name}.")]
+        objects_irregular = [object for object in bpy.data.objects if object.name.startswith(f"{object_selected_name}.")]
+        
+        # Dictionary to store the relationship between cube objects and irregular objects
+        relation_cube_irregular = {}
+
             
-            # Dictionary to store the relationship between cube objects and irregular objects
-            relation_cube_irregular = {}
+        for object_cube in objects_cube:
+            # # Get the world coordinates bounding-box-points of object_cube
+            bbox_cube = [['%.4f' % elem for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
+            have_something_inside = 0
+            # Check if each irregular object is contained within any cube object
+            for object_irregular in objects_irregular:
+                # Get the world coordinates of the bounding-box-points of object_irregular
+                bbox_irregular = [ ['%.4f' % elem for elem in object_irregular.matrix_world @ Vector(coor)] for coor in object_irregular.bound_box]
 
+                # # Check if the bounding box of the irregular object is contained within the bounding box of the cube object
+                is_inside = all(
+                    float(bbox_cube[0][i]) <= float(bbox_irregular[0][i]) <= float(bbox_cube[6][i]) and
+                    float(bbox_cube[0][i]) <= float(bbox_irregular[6][i]) <= float(bbox_cube[6][i])
+                    for i in range(3)
+                )                    
+                                
+                if is_inside:
+                    relation_cube_irregular[object_irregular.name] = object_cube.name
+                    have_something_inside = 1
+                    #print(f'===={object_irregular.name} - {object_cube.name}=====')
+                    #for i in range (3):                        
+                        #print(f'c0|{i}:{bbox_cube[0][i]} <= i{i}|{i}:{bbox_irregular[i][i]} <= c6|{i}:{bbox_cube[6][i]}//c0|{i}:{bbox_cube[0][i]} <= i7|{i}:{bbox_irregular[7][i]} <= c6|{i}:{bbox_cube[6][i]}')
+                '''if object_irregular.name == 'irregObjPart.068': #and object_cube.name == 'foamBlock.113':
+                    print(f'-----------------====[{have_something_inside}]--{object_irregular.name} -in- {object_cube.name}=====')
+                    for i in range (3):                     
+                        print(f'[{float(bbox_cube[0][i]) <= float(bbox_irregular[0][i]) <= float(bbox_cube[6][i])}] and [{float(bbox_cube[0][i]) <= float(bbox_irregular[6][i]) <= float(bbox_cube[6][i])}] - c0  |{i}:{bbox_cube[0][i]} <= i0|{i}:{bbox_irregular[0][i]} <= c6|{i}:{bbox_cube[6][i]}//c0|{i}:{bbox_cube[0][i]} <= i6|{i}:{bbox_irregular[6][i]} <= c6|{i}:{bbox_cube[6][i]}')
+                    
+                    break'''
+            #Delete cube if don't have nothing inside            
+            if have_something_inside == 0:
+                bpy.data.objects.remove(object_cube, do_unlink=True)
+
+        for object_irregular, object_cube in (relation_cube_irregular.items()):
+            #set objects                 
+            object_irregular_obj = bpy.data.objects[object_irregular]
+            object_cube_obj = bpy.data.objects[object_cube]   
+
+            #lock modification but Z rotation
+            object_irregular_obj.lock_rotation= (True, True, False)
+            object_irregular_obj.lock_location = (True, True, True)
+            object_irregular_obj.lock_scale = (True, True, True)
+            object_cube_obj.lock_rotation= (True, True, False)
+            object_cube_obj.lock_location = (True, True, True)
+            object_cube_obj.lock_scale = (True, True, True)
+            object_cube_obj.hide_select = True                
+
+            # --Set the origin on the current irregular object to the cube center
+            # change cursor location
+            bpy.context.scene.cursor.location = object_cube_obj.location
+            bpy.ops.object.select_all(action='DESELECT')
+            object_irregular_obj.select_set(True)
+            bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+
+            if not(object_cube_obj.users_collection[0].name.startswith(f"{collections_name}.")):
                 
-            for object_cube in objects_cube:
-                # # Get the world coordinates bounding-box-points of object_cube
-                bbox_cube = [['%.4f' % elem for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
-                have_something_inside = 0
-                # Check if each irregular object is contained within any cube object
-                for object_irregular in objects_irregular:
-                    # Get the world coordinates of the bounding-box-points of object_irregular
-                    bbox_irregular = [ ['%.4f' % elem for elem in object_irregular.matrix_world @ Vector(coor)] for coor in object_irregular.bound_box]
-
-                    # # Check if the bounding box of the irregular object is contained within the bounding box of the cube object
-                    is_inside = all(
-                        float(bbox_cube[0][i]) <= float(bbox_irregular[0][i]) <= float(bbox_cube[6][i]) and
-                        float(bbox_cube[0][i]) <= float(bbox_irregular[6][i]) <= float(bbox_cube[6][i])
-                        for i in range(3)
-                    )                    
-                                    
-                    if is_inside:
-                        relation_cube_irregular[object_irregular.name] = object_cube.name
-                        have_something_inside = 1
-                        #print(f'===={object_irregular.name} - {object_cube.name}=====')
-                        #for i in range (3):                        
-                            #print(f'c0|{i}:{bbox_cube[0][i]} <= i{i}|{i}:{bbox_irregular[i][i]} <= c6|{i}:{bbox_cube[6][i]}//c0|{i}:{bbox_cube[0][i]} <= i7|{i}:{bbox_irregular[7][i]} <= c6|{i}:{bbox_cube[6][i]}')
-                    #if object_irregular.name == 'irregObjPart.038' and object_cube.name == 'foamBlock.113':
-                    #    print(f'-----------------====[{have_something_inside}]--{object_irregular.name} - {object_cube.name}=====')
-                    #    for i in range (3):                        
-                    #        print(f'[{float(bbox_cube[0][i]) <= float(bbox_irregular[0][i]) <= float(bbox_cube[6][i])}] and [{float(bbox_cube[0][i]) <= float(bbox_irregular[6][i]) <= float(bbox_cube[6][i])}] - c0  |{i}:{bbox_cube[0][i]} <= i0|{i}:{bbox_irregular[0][i]} <= c6|{i}:{bbox_cube[6][i]}//c0|{i}:{bbox_cube[0][i]} <= i6|{i}:{bbox_irregular[6][i]} <= c6|{i}:{bbox_cube[6][i]}')
-                        
-                        #break
-                #Delete cube if don't have nothing inside            
-                if have_something_inside == 0:
-                    bpy.data.objects.remove(object_cube, do_unlink=True)
-
-            for object_irregular, object_cube in (relation_cube_irregular.items()):
-                #set objects                 
-                object_irregular_obj = bpy.data.objects[object_irregular]
-                object_cube_obj = bpy.data.objects[object_cube]   
-
-                #lock modification but Z rotation
-                object_irregular_obj.lock_rotation= (True, True, False)
-                object_irregular_obj.lock_location = (True, True, True)
-                object_irregular_obj.lock_scale = (True, True, True)
-                object_cube_obj.lock_rotation= (True, True, False)
-                object_cube_obj.lock_location = (True, True, True)
-                object_cube_obj.lock_scale = (True, True, True)
-                object_cube_obj.hide_select = True                
-
-                # --Set the origin on the current irregular object to the cube center
-                # change cursor location
-                bpy.context.scene.cursor.location = object_cube_obj.location
-                bpy.ops.object.select_all(action='DESELECT')
-                object_irregular_obj.select_set(True)
-                bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-
-                if not(object_cube_obj.users_collection[0].name.startswith(f"{collections_name}.")):
-                    
-                    areaCNC = self.crate_cnc_area(object_cube_obj)                    
-                    
-                    #lock modification but Z rotation       
-                    areaCNC.lock_rotation= (True, True, True)
-                    areaCNC.lock_location = (True, True, True)
-                    areaCNC.lock_scale = (True, True, True)
-                    areaCNC.hide_select = True
-                    #make areaCNC and block just wire visible
-                    areaCNC.display_type = 'WIRE'
-                    #object_cube_obj.display_type = 'WIRE'
-
-                    # Create a new collection for the related objects
-                    blocks_collection = bpy.data.collections.new(f"{collections_name}.000")
-
-                    original_collection = object_cube_obj.users_collection[0]
-                    original_collection.objects.unlink(object_cube_obj)
-                    blocks_collection.objects.link(object_cube_obj)            
-
-                    original_collection = object_irregular_obj.users_collection[0]
-                    original_collection.objects.unlink(object_irregular_obj)
-                    blocks_collection.objects.link(object_irregular_obj)
-
-                    original_collection = areaCNC.users_collection[0]
-                    original_collection.objects.unlink(areaCNC)
-                    blocks_collection.objects.link(areaCNC) 
-                    
-                    # Add the created collection to the scene
-                    bpy.context.scene.collection.children.link(blocks_collection) 
-
-                    #set irregular object as parent of the cube
-                    object_cube_obj.parent = object_irregular_obj
-                    #fix miss location after parenting
-                    object_cube_obj.matrix_parent_inverse = object_irregular_obj.matrix_world.inverted()
-                else:
-                    #print(f"The irregular object {object_irregular} is inside the cube object {object_cube}")
-                    original_collection = object_irregular_obj.users_collection[0]
-                    original_collection.objects.unlink(object_irregular_obj)
-                    object_cube_obj.users_collection[0].objects.link(object_irregular_obj)
-                    #bpy.context.scene.collection.children.link(blocks_collection)
+                areaCNC = self.crate_cnc_area(object_cube_obj)                    
                 
+                #lock modification but Z rotation       
+                areaCNC.lock_rotation= (True, True, True)
+                areaCNC.lock_location = (True, True, True)
+                areaCNC.lock_scale = (True, True, True)
+                areaCNC.hide_select = True
+                #make areaCNC and block just wire visible
+                areaCNC.display_type = 'WIRE'
+                #object_cube_obj.display_type = 'WIRE'
+
+                # Create a new collection for the related objects
+                blocks_collection = bpy.data.collections.new(f"{collections_name}.000")
+
+                original_collection = object_cube_obj.users_collection[0]
+                original_collection.objects.unlink(object_cube_obj)
+                blocks_collection.objects.link(object_cube_obj)            
+
+                original_collection = object_irregular_obj.users_collection[0]
+                original_collection.objects.unlink(object_irregular_obj)
+                blocks_collection.objects.link(object_irregular_obj)
+
+                original_collection = areaCNC.users_collection[0]
+                original_collection.objects.unlink(areaCNC)
+                blocks_collection.objects.link(areaCNC) 
+                
+                # Add the created collection to the scene
+                bpy.context.scene.collection.children.link(blocks_collection) 
+
+                #set irregular object as parent of the cube
+                object_cube_obj.parent = object_irregular_obj
+                #fix miss location after parenting
+                object_cube_obj.matrix_parent_inverse = object_irregular_obj.matrix_world.inverted()
+            else:
+                #print(f"The irregular object {object_irregular} is inside the cube object {object_cube}")
+                original_collection = object_irregular_obj.users_collection[0]
+                original_collection.objects.unlink(object_irregular_obj)
+                object_cube_obj.users_collection[0].objects.link(object_irregular_obj)
+                #bpy.context.scene.collection.children.link(blocks_collection)
+            if object_irregular_obj.location.z < self.foam_block_z :
                 self.cut_wood(object_irregular_obj,'x')
                 self.cut_wood(object_irregular_obj,'y')
-                #----create STL file of irregular object
-                collection_name = object_irregular_obj.users_collection[0].name
-                self.export_to_stl_origin(collection_name,collection_name,"irregObjPart.")
+            #----create STL file of irregular object
+            collection_name = object_irregular_obj.users_collection[0].name
+            self.export_to_stl_origin(collection_name,collection_name,"irregObjPart.")
 
-        except Exception as e:
-            print("Error Custon Function, UNDO:", e)
+        #except Exception as e:
+            #print("Error Custon Function, UNDO:", e)
             # UnDo in case of error
             #bpy.ops.ed.undo()
     
@@ -849,7 +874,7 @@ class funcs():
         bpy.context.scene.cursor.location = (loc_x, loc_y - CNC_margin, 0)
 
         # Create a plane to serve as the cutter plane
-        bpy.ops.mesh.primitive_plane_add(size=2)
+        bpy.ops.mesh.primitive_plane_add(size=4)
         silhouette_base = bpy.context.object
         silhouette_base.name = "cutterPlane.001"
         silhouette_base.rotation_euler = (math.radians(90), 0, 0)
@@ -884,7 +909,7 @@ class funcs():
 
         # Create a second plane to serve as the silhouette cutter
         distance_to_plane=0.025
-        bpy.ops.mesh.primitive_plane_add(size=2)
+        bpy.ops.mesh.primitive_plane_add(size=4)
         silhouette = bpy.context.object
         silhouette.name = "siluete.001"
         silhouette.rotation_euler = (math.radians(90), 0, 0)
@@ -1263,10 +1288,30 @@ class funcs():
 
     def export_to_stl_origin(self,collection_name,stl_name,obj_name_base):
         scale_for_powermill=1000
-
+        try:
+            os.makedirs(".\\"+collection_name, exist_ok=True)  
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
         output_path=".\\"+collection_name+"\\"+stl_name+".stl"
         #get foamBlock object
         objective_object = [obj for obj in bpy.data.objects if obj.name.startswith(obj_name_base) and collection_name in obj.users_collection[0].name]
+        
+        # --Check dimentions--
+        y_less=999999
+        y_max=0
+        for obj in bpy.data.objects:
+            if obj.name.startswith('irregObjPart.'):
+                if obj.location.y > y_max:
+                    y_max=obj.location.y
+                if obj.location.y < y_less:
+                    y_less=obj.location.y
+        distance = y_max-y_less
+        middle_pos = y_less + distance/2
+
+        #print(f"export_to_stl_origin: menor -> {y_less} mayor -> {y_max} distancia de centros -> {distance}")
+
+        # --END Check dimentions--
 
         bpy.ops.object.select_all(action='DESELECT')
 
@@ -1279,11 +1324,29 @@ class funcs():
         location_ini_x = objective_object[0].location.x
         location_ini_y = objective_object[0].location.y
         location_ini_z = objective_object[0].location.z
+        rotation_ini_x = objective_object[0].rotation_euler.x
 
-        objective_object[0].location.x = 0
+        # - no rotate logic -
+        '''objective_object[0].location.x = 0
         objective_object[0].location.y = 0
         objective_object[0].location.z = 0
+        objective_object[0].rotation_euler.x = math.radians(0)'''
 
+
+        # - Rotate elements related to the middle of he object -
+        objective_object[0].location.x = 0
+        if(objective_object[0].location.y < middle_pos):
+            objective_object[0].location.y = -0.49 #0
+            objective_object[0].location.z = 0.49 #0
+            objective_object[0].rotation_euler.x = math.radians(-90) #0
+            #print("giro Izq")
+        elif(objective_object[0].location.y > middle_pos):
+            objective_object[0].location.y = 0.49 #0
+            objective_object[0].location.z = 0.49 #0
+            objective_object[0].rotation_euler.x = math.radians(90) #0
+            #print("giro Der")
+
+        # ------- Fix Faces -------
         # go edit mode
         bpy.ops.object.mode_set(mode='EDIT')
         # select al faces
@@ -1297,10 +1360,11 @@ class funcs():
         # Export the object as STL
         bpy.ops.export_mesh.stl(filepath=output_path, use_selection=True, check_existing=False,global_scale = scale_for_powermill)
 
-        # load location
+        # load and restore location
         objective_object[0].location.x = location_ini_x
         objective_object[0].location.y = location_ini_y
         objective_object[0].location.z = location_ini_z
+        objective_object[0].rotation_euler.x = rotation_ini_x
         if not (objective_object[0].name.startswith("irregObjPart.")):
             objective_object[0].hide_select = True
         bpy.ops.object.select_all(action='DESELECT')
