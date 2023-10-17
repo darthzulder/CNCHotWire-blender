@@ -736,7 +736,7 @@ class funcs():
         pathFileNumber=pathFileName+'%03d' % i +"_samurai.nc"
         #create .nc file 
         try:
-            os.makedirs(".\\"+collection_name, exist_ok=True)  
+            os.makedirs(".\\"+collection_name, exist_ok=True)
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
@@ -750,12 +750,19 @@ class funcs():
         f = open(pathFileNumber,"w+")
         f.write(f'(GCODE_from_Blender)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
         
-        #direction will be form +X  to -X
+        #direction will be from +X  to -X
         x_first = verts[0]['x']
         for i in range(0,len(verts)):
             x=round((x_first - verts[i]['x']) * scale,2)
             y=round(verts[i]['y'] * scale,2)
-            z=round(verts[i]['z'] * scale,2)
+
+            if verts[i]['z'] > 0:
+                z=round((verts[i]['z'] - verts[0]['z']) * scale,2)
+                print(f"more than 0 ({verts[i]['z']} - {verts[0]['z']} = {z})")
+            else:
+                z=round(verts[i]['z'] * scale,2)
+                print(f"less than 0 ({verts[i]['z']}) = {z}")
+
             coorX=str('%.4f' % x)
             coorY=str('%.4f' % y)
             coorZ=str('%.4f' % z)
@@ -859,7 +866,7 @@ class funcs():
         # Set scale factor, how big will scale the siluete
         scale_factor = 1.05
         # Set subdivision level for the siluete
-        siluete_multires = 7
+        siluete_multires = 8
 
         margen_max_cnc=1.137
         margen_min_cnc=1.013
@@ -871,7 +878,7 @@ class funcs():
 
         # Move the 3D cursor below the selected object by the CNC_margin amount
         loc_x, loc_y, loc_z = selected_object.location
-        bpy.context.scene.cursor.location = (loc_x, loc_y - CNC_margin, 0)
+        bpy.context.scene.cursor.location = (loc_x, loc_y - CNC_margin, loc_z)
 
         # Create a plane to serve as the cutter plane
         bpy.ops.mesh.primitive_plane_add(size=4)
@@ -905,7 +912,7 @@ class funcs():
         bpy.ops.object.mode_set(mode='OBJECT')
         
         # Reset 3D cursor position
-        bpy.context.scene.cursor.location = (loc_x, loc_y, 0)
+        bpy.context.scene.cursor.location = (loc_x, loc_y, loc_z)
 
         # Create a second plane to serve as the silhouette cutter
         distance_to_plane=0.025
@@ -938,7 +945,7 @@ class funcs():
         # Create a plane to serve as the cutter plane
         bpy.ops.mesh.primitive_plane_add(size=5)
         plane_base = bpy.context.object
-        plane_base.name = "cutterPlane.001"
+        plane_base.name = "cutterPlaneforSilhouette.001"
         bpy.ops.object.transform_apply(scale=True,location=False)
 
         bpy.ops.object.select_all(action='DESELECT')    
@@ -1037,7 +1044,6 @@ class funcs():
 
         # Find the vertex with the maximum X coordinate among the selected vertices
         max_x_vertex = max(lowest_z_vertices, key=lambda v: v.co.x)
-        
 
         for e in bm.edges:
             if e.verts[0].index in indices_in_z and e.verts[1].index in indices_in_z:
@@ -1054,20 +1060,58 @@ class funcs():
         bpy.ops.mesh.select_mode(type="VERT")
 
         ##-------Extrude to the limits of the CNC---------
-        # Extrude the minimum X vertex -2 in the X direction
-        newvert = bm.verts.new((loc_x-margen_min_cnc, min_x_vertex.co.y, 0))
-        newedge = bm.edges.new([min_x_vertex, newvert])
-        indices_min=indices_in_z[1]+1
         # Extrude the maximum X vertex +2 in the X direction
-        newvert = bm.verts.new((loc_x+margen_max_cnc, max_x_vertex.co.y, 0))
+        newvert = bm.verts.new((loc_x+margen_max_cnc, max_x_vertex.co.y, loc_z))
         newedge = bm.edges.new([max_x_vertex, newvert])
         indices_max=len(bm.verts)-1
+
+        if max_x_vertex.index == min_x_vertex.index:
+            # Update the mesh
+            bm.verts.ensure_lookup_table()
+            print(f"------------------max {max_x_vertex.index}  min {min_x_vertex.index} len {len(bm.verts)}")
+            
+            # Index of the start vertex
+            initial = bm.verts[len(bm.verts)-1]
+
+            vert = initial
+            prev = None
+            for i in range(len(bm.verts)):
+                vert.index = i
+                next = None
+                adjacent = []
+                for v in [e.other_vert(vert) for e in vert.link_edges]:
+                    if (v != prev and v != initial):
+                        next = v
+                if next == None:
+                    break
+                prev, vert = vert, next
+
+            # Sort vertices
+            bm.verts.sort()
+            bm.verts.ensure_lookup_table()
+            min_x_vertex=bm.verts[1]
+            before_last=bm.verts[len(bm.verts)-1]
+            newvert = bm.verts.new((min_x_vertex.co.x, min_x_vertex.co.y, min_x_vertex.co.z))
+            newedge = bm.edges.new([before_last, newvert])
+            
+            bm.verts.ensure_lookup_table()
+            before_last=bm.verts[len(bm.verts)-1]
+            newvert = bm.verts.new((loc_x+margen_max_cnc, min_x_vertex.co.y, loc_z))
+            newedge = bm.edges.new([before_last, newvert])
+
+        else:
+            # Extrude the minimum X vertex -2 in the X direction
+            newvert = bm.verts.new((loc_x-margen_min_cnc, min_x_vertex.co.y, loc_z))
+            newedge = bm.edges.new([min_x_vertex, newvert])
+            indices_min=indices_in_z[1]+1
            
-        self.reorder_vertices(indices_max)
+            self.reorder_vertices(indices_max)
 
         # Update the bmesh and exit Edit Mode
         bmesh.update_edit_mesh(obj.data)
         bpy.ops.object.mode_set(mode='OBJECT')
+
+        bpy.context.scene.cursor.location = (0, 0, 0)
 
     def cut_silhouette(self, loc_z, update=False):
         
@@ -1128,6 +1172,10 @@ class funcs():
         silhouette.location.z = loc_z
         silhouette.location.y = -1.5
         self.cut_foam()
+        
+        irregular_obj[0].select_set(True)
+        #bpy.context.active_object.name = irregular_obj[0].name
+        bpy.context.view_layer.objects.active = irregular_obj[0]
 
     def cut_wood(self, selected_obj=False, wood_axis='x'):
         #identify and choose collection union
