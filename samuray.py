@@ -40,6 +40,9 @@ class funcs():
     foam_block_cut_x = foam_block_x + cut_thickness
     foam_block_cut_y = foam_block_y + cut_thickness
     foam_block_cut_z = foam_block_z
+
+    def __init__(self):
+        self.select_before = None
     
     def change_origin (self):
         #print(f"-------change_origin>{dir}")
@@ -637,34 +640,35 @@ class funcs():
     
     def draw_init(self):
         selected_object = bpy.context.active_object
+        self.select_before = selected_object
+        print(f"------------------------CARGA OBJ = {self.select_before.name}------------------------")
         rX, rY, rZ = selected_object.rotation_euler
-        print(selected_object.users_collection[0].name+'==>%.4f' % float(math.degrees(rZ)))
+        print(selected_object.users_collection[0].name+'==> rotation Z %.4f' % float(math.degrees(rZ)))
 
         loc_x, loc_y, loc_z = selected_object.location
 
-        
-
         #create gpencil and put in drawing mode
-        bpy.ops.object.gpencil_add(location=(loc_x, loc_y-selected_object.dimensions.y*1.5, loc_z), type='EMPTY')        
-        
+        bpy.ops.object.gpencil_add(location=(loc_x, loc_y-selected_object.dimensions.y*2, loc_z), type='EMPTY')   
 
         #change to the actual collection
         gpencil_selected = bpy.context.active_object
         gpencil_coll=gpencil_selected.users_collection[0]
-        print(gpencil_coll.name)        
+        #print(gpencil_coll.name)        
         
         gpencil_coll.objects.unlink(gpencil_selected)
         selected_coll = selected_object.users_collection[0]
         selected_coll.objects.link(gpencil_selected)
 
+        # Change the Mode in the actual View while selected the gpencil
         bpy.context.view_layer.objects.active = gpencil_selected
         bpy.ops.object.mode_set(mode='PAINT_GPENCIL')
-                
+             
+        #bpy.ops.gpencil.primitive_polyline(subdivision=6, edges=4, type='POLYLINE', wait_for_input=True)        
 
         #turn on the auto key
         bpy.context.scene.tool_settings.use_keyframe_insert_auto = True
 
-        #change Viewport to Solid
+        #change Viewport to front view and shading type
         for area in bpy.data.screens[3].areas: 
             if area.type == 'VIEW_3D':
                 for space in area.spaces: 
@@ -672,9 +676,12 @@ class funcs():
                         space.shading.type = 'SOLID'
                         bpy.ops.view3d.view_axis(type='FRONT')
 
-    def gpencil_to_mesh(self):
-            context = bpy.context.copy()
+    def gpencil_to_mesh(self, scale = 1):
+            print(f"------------------------self.select_before.name = {self.select_before.name}------------------------")
+            bpy.context.scene.tool_settings.use_keyframe_insert_auto = False
 
+            context = bpy.context.copy()
+            
             for area in bpy.context.screen.areas:
                 if area.type == 'VIEW_3D':
                     for region in area.regions:
@@ -699,29 +706,146 @@ class funcs():
             bpy.context.view_layer.objects.active = foamcut_gpencil_curve
             gpencil_selected = bpy.context.active_object
             gpencil_coll=gpencil_selected.users_collection[0]
-            print(f'*-*{gpencil_coll.name}')        
             
             gpencil_coll.objects.unlink(gpencil_selected)
             selected_coll.objects.link(gpencil_selected)  
 
-            #-----Select the initial object
+            
+              
+
+            #-----Select the gpencil curve object
             foamcut_gpencil_curve.select_set(True)
             bpy.context.view_layer.objects.active = foamcut_gpencil_curve
             
             
             verts = foamcut_gpencil_curve.data.vertices
 
-            #export to a *.nc file
-            self.write_to_file(verts)
+            #get irregular object
+            foamBlock = [obj for obj in bpy.data.objects if obj.name.startswith("foamBlock.") and selected_coll.name in obj.users_collection[0].name]
 
- 
+            # change cursor location
+            bpy.context.scene.cursor.location =(foamBlock[0].location.x,foamBlock[0].location.y,foamBlock[0].location.z)
+            # set the origin on the current object to the 3dcursor location
+            bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+            
+            print(f'*-*{gpencil_coll.name} => {selected_coll.name} bloque {foamBlock[0].name} rotacion{math.degrees(foamBlock[0].rotation_euler.z)}')
 
-            #cut the foam with the actual object
-            self.cut_foam()    
+            #----------------------Reorder vertex----------------------------
 
-            #hide gpencil
+            # Switch to Edit Mode
+            bpy.ops.object.mode_set(mode='EDIT')
+
+            # Select all vertices to extrude
+            bpy.ops.mesh.select_all(action='SELECT')
+
+            # Get the mesh data and create a BMesh
+            me = bpy.context.object.data
+            bm = bmesh.from_edit_mesh(me)
+
+            # Dissolve vertices within a certain angle limit
+            #bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(5), verts=bm.verts)
+
+            bm.verts.ensure_lookup_table()
+
+            # Set Index of the start vertex
+            if bm.verts[0].index > bm.verts[len(bm.verts)-1].index:
+                initial = bm.verts[0]
+            else:
+                initial = bm.verts[len(bm.verts)-1]                
+
+            vert = initial
+            prev = None
+            for i in range(len(bm.verts)):
+                vert.index = i
+                next = None
+                adjacent = []
+                for v in [e.other_vert(vert) for e in vert.link_edges]:
+                    if (v != prev and v != initial):
+                        next = v
+                if next == None:
+                    break
+                prev, vert = vert, next
+
+            # Sort vertices
+            bm.verts.sort()
+
+            # Update the mesh
+            bmesh.update_edit_mesh(me)
+            #----------------------Reorder vertex END----------------------------
+
+            # Extract the vertex coordinates from the verts list
+            
+            vertex_coordinates = [{'x':v.co.x, 'y':v.co.y, 'z':v.co.z} for v in bm.verts if  -1.013 < v.co.x < 1.137 ]
+            if vertex_coordinates[0]['x']>0:
+                vertex_coordinates.insert(0,{'x':1.137, 'y':0, 'z':0})
+            else:
+                vertex_coordinates.append({'x':1.137, 'y':0, 'z':0})
+
+            vertex_coo_edit = {}
+
+            print(f"--  {vertex_coordinates[0]['x']} < {vertex_coordinates[len(vertex_coordinates)-1]['x']}")
+            if vertex_coordinates[0]['x'] > vertex_coordinates[len(vertex_coordinates)-1]['x']:
+                custom_range = range(0,len(vertex_coordinates))
+                print("direction =>")
+            else:
+                custom_range = reversed(range(0,len(vertex_coordinates)))
+                print("direction <=")
+
+            j=0
+            for i in custom_range:
+                                    
+                vertex_coo_edit[j] = {'x':(vertex_coordinates[i]['x']), 'y':vertex_coordinates[i]['y'], 'z':vertex_coordinates[i]['z']}
+                #print(f"vertex_coo_edit[j{j} => i{i}] = {vertex_coo_edit[j]}")
+                j+=1
+                        
+            # ------Export to a *.nc file
+            self.write_to_file(vertex_coo_edit,math.degrees(foamBlock[0].rotation_euler.z),selected_coll.name)
+
+            # Switch to Object Mode
+            bpy.ops.object.mode_set(mode='OBJECT')     
+
+            gpencil_curve = bpy.context.active_object
+        
             #foamcut_gpencil_curve.hide_select =  True
-            bpy.context.scene.tool_settings.use_keyframe_insert_auto = False                
+            bpy.context.scene.tool_settings.use_keyframe_insert_auto = False
+
+             # --- Cut the foam START ---
+
+            selected_object_active = self.select_before
+            #selected_objects = bpy.context.selected_objects
+
+            # Create a new collection for the related objects
+            blocks_collection = bpy.data.collections.new(f"small_parts_{selected_object_active.name}.000")
+            bpy.context.scene.collection.children.link(blocks_collection)
+
+            original_collection = selected_object_active.users_collection[0]
+            original_collection.objects.unlink(selected_object_active)
+            blocks_collection.objects.link(selected_object_active)
+
+            print (f"---original_collection = {original_collection.name} | blocks_collection.name = {blocks_collection.name}")
+
+            '''# create primitive cube as foamBlock
+            # change cursor location
+            bpy.context.scene.cursor.location =(selected_object_active.location.x,selected_object_active.location.y,self.foam_block_z/2)
+            bpy.ops.mesh.primitive_cube_add(size=scale)
+            foamBlock = bpy.context.object        
+            foamBlock.name = "foamBlock.001"
+            foamBlock.dimensions = (self.foam_block_x, self.foam_block_y, self.foam_block_z)'''
+            
+            # --- Cut the foam END ---
+
+            #self.cut_silhouette(self.location_z,self.udpdate_value_bool)
+
+            #delete gpencil curve
+            bpy.data.objects.remove(gpencil_curve, do_unlink=True)
+
+            #change Viewport to front view and shading type
+            for area in bpy.data.screens[3].areas: 
+                if area.type == 'VIEW_3D':
+                    for space in area.spaces: 
+                        if space.type == 'VIEW_3D':
+                            space.shading.type = 'WIREFRAME'
+                            bpy.ops.view3d.view_axis(type='FRONT')
 
     def write_to_file(self,verts,rotation_z_degrees,collection_name,update=False, wood=False):
         scale=1000
@@ -752,22 +876,26 @@ class funcs():
         
         #direction will be from +X  to -X
         x_first = verts[0]['x']
-        for i in range(0,len(verts)):
+
+        custom_range = range(0,len(verts))         
+
+        for i in custom_range:
             x=round((x_first - verts[i]['x']) * scale,2)
             y=round(verts[i]['y'] * scale,2)
 
-            if verts[i]['z'] > 0:
+            if verts[i]['z'] > 0 and wood == False:
                 z=round((verts[i]['z'] - verts[0]['z']) * scale,2)
-                print(f"more than 0 ({verts[i]['z']} - {verts[0]['z']} = {z})")
+                #print(f"more than 0 ({verts[i]['z']} - {verts[0]['z']} = {z})")
             else:
                 z=round(verts[i]['z'] * scale,2)
-                print(f"less than 0 ({verts[i]['z']}) = {z}")
+                #print(f"less than 0 ({verts[i]['z']}) = {z}")
 
             coorX=str('%.4f' % x)
             coorY=str('%.4f' % y)
             coorZ=str('%.4f' % z)
 
             #write in .nc file
+            #if 0 < x <= 2150:
             f.write(f'G01X{coorX}Y{coorZ}A{rotation_z_degrees}\n') 
             #---------------write creasees if is a wood cut-------------------------
             if i+1 < len(verts) and i > 0 and wood != False:
@@ -1313,7 +1441,7 @@ class funcs():
         bpy.data.objects.remove(silhouette_wood, do_unlink=True)
         #print('CUT_WOOD--END')
 
-    def export_gcode(self):
+    def export_gcode_raw(self):
         selected_object = bpy.context.selected_objects[0]
         #get colection name
         collection_name = selected_object.users_collection[0].name
@@ -1417,6 +1545,65 @@ class funcs():
             objective_object[0].hide_select = True
         bpy.ops.object.select_all(action='DESELECT')
 
+    def create_block_apart(self, scale = 1):
+
+        selected_object_active = bpy.context.active_object
+        selected_objects = bpy.context.selected_objects
+
+        # create primitive cube as foamBlock
+        # change cursor location
+        bpy.context.scene.cursor.location =(selected_object_active.location.x,selected_object_active.location.y,self.foam_block_z/2)
+        bpy.ops.mesh.primitive_cube_add(size=scale)
+        foamBlock = bpy.context.object        
+        foamBlock.name = "foamBlock.001"
+        foamBlock.dimensions = (self.foam_block_x, self.foam_block_y, self.foam_block_z)
+        bpy.ops.object.transform_apply(scale=True)
+
+        # change cursor location
+        bpy.context.scene.cursor.location.z = 0
+        # set the origin on the current object to the 3dcursor location
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+        
+        # Get the object to apply the mod
+        obj = bpy.context.object
+        # Move the object
+        obj.location.z = 0
+
+        areaCNC = self.crate_cnc_area(foamBlock)
+                
+        #lock modification but Z rotation       
+        areaCNC.lock_rotation= (True, True, True)
+        areaCNC.lock_location = (True, True, True)
+        areaCNC.lock_scale = (True, True, True)
+        areaCNC.hide_select = True
+        #make areaCNC and block just wire visible
+        areaCNC.display_type = "WIRE"
+        foamBlock.display_type = "WIRE"
+
+        # Create a new collection for the related objects
+        blocks_collection = bpy.data.collections.new(f"small_parts.000")
+
+        original_collection = foamBlock.users_collection[0]
+        original_collection.objects.unlink(foamBlock)
+        blocks_collection.objects.link(foamBlock)
+
+        '''original_collection = selected_object_active.users_collection[0]
+        original_collection.objects.unlink(selected_object_active)
+        blocks_collection.objects.link(selected_object_active)'''
+
+        for object_selected in selected_objects:
+            original_collection = object_selected.users_collection[0]
+            original_collection.objects.unlink(object_selected)
+            blocks_collection.objects.link(object_selected)
+
+        original_collection = areaCNC.users_collection[0]
+        original_collection.objects.unlink(areaCNC)
+        blocks_collection.objects.link(areaCNC)
+        
+        # Add the created collection to the scene
+        bpy.context.scene.collection.children.link(blocks_collection)
+
+
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
 class BUTTOM_CUSTOM01(bpy.types.Operator):
@@ -1508,12 +1695,61 @@ class BUTTOM_CUSTOM05(bpy.types.Operator):
     def execute(self, context):
         
         funcion = funcs()
-        funcion.export_gcode()
+        funcion.export_gcode_raw()
 
         print("execute button05 custom ok!")
 
         return {'FINISHED'}
+
+#-----------------------------------------------------------
+
+class BUTTOM_CUSTOM06(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM06_CutFoam"
+    bl_idname = "object.button_custom06"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
         
+        funcion = funcs()
+        funcion.create_block_apart()
+
+        print("execute button06 custom ok!")
+
+        return {'FINISHED'}    
+
+class BUTTOM_CUSTOM07(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM07_CutFoam"
+    bl_idname = "object.button_custom07"
+    bl_options = {'UNDO'}
+
+    global funcion
+
+    def execute(self, context):
+        
+        BUTTOM_CUSTOM07.funcion = funcs()
+        BUTTOM_CUSTOM07.funcion.draw_init()
+
+        print("execute button07 custom ok!")
+
+        return {'FINISHED'} 
+    @classmethod
+    def description(cls, context, properties):
+        return "draw_init()"
+
+class BUTTOM_CUSTOM08(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM08_CutFoam"
+    bl_idname = "object.button_custom08"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        
+       #self.funcion = funcs()
+        BUTTOM_CUSTOM07.funcion.gpencil_to_mesh()
+
+        print("execute button08 custom ok!")
+
+        return {'FINISHED'}     
+     
 # PANEL UI (PART 1 DRAW)
 ####################################################
 
@@ -1584,25 +1820,80 @@ class PANEL_CUSTOM_UI_02(bpy.types.Panel):
         row01.scale_y = 2
         row01.operator("object.button_custom05", text= "Export GCODE and RawForm", icon = "FILE_TICK")
 
+class PANEL_CUSTOM_UI_03(bpy.types.Panel):
+    bl_label = "Small Parts"
+    bl_idname = "OBJECT_PT_panel_03"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Panel Custom UI"
+
+    def draw(self, context):
+        #variables
+        layout = self.layout
+
+        #create simple row
+        row01 = layout.row()
+        row01.label(text = "First Step")
+
+        # add button custom
+        row01 = layout.row()
+        row01.scale_y = 2
+        row01.operator("object.button_custom06", text= "Prepare Block for small parts", icon = "GRID")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = "Second Step")
+
+        # add button custom
+        row02 = layout.row()
+        row02.scale_y = 2
+        row02.operator("object.button_custom06", text= "Prepare Cuts in CNC Hot Wire", icon = "IMGDISPLAY")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = "Thirth Step")
+
+        # add button custom
+        row02 = layout.row()
+        row02.scale_y = 2
+        row02.operator("object.button_custom07", text= "Test01", icon = "IMGDISPLAY")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = "Fourth Step")
+
+        # add button custom
+        row02 = layout.row()
+        row02.scale_y = 2
+        row02.operator("object.button_custom08", text= "Test02", icon = "IMGDISPLAY")
+
 # REGISTER (PART 2)
 ####################################################
 def register():
     bpy.utils.register_class(PANEL_CUSTOM_UI_01)
     bpy.utils.register_class(PANEL_CUSTOM_UI_02)
+    bpy.utils.register_class(PANEL_CUSTOM_UI_03)
     bpy.utils.register_class(BUTTOM_CUSTOM01)
     bpy.utils.register_class(BUTTOM_CUSTOM02)
     bpy.utils.register_class(BUTTOM_CUSTOM03)
     bpy.utils.register_class(BUTTOM_CUSTOM04)
     bpy.utils.register_class(BUTTOM_CUSTOM05)
+    bpy.utils.register_class(BUTTOM_CUSTOM06)
+    bpy.utils.register_class(BUTTOM_CUSTOM07)
+    bpy.utils.register_class(BUTTOM_CUSTOM08)
 
 def unregister():
     bpy.utils.unregister_class(PANEL_CUSTOM_UI_01)
     bpy.utils.unregister_class(PANEL_CUSTOM_UI_02)
+    bpy.utils.unregister_class(PANEL_CUSTOM_UI_03)
     bpy.utils.unregister_class(BUTTOM_CUSTOM01)
     bpy.utils.unregister_class(BUTTOM_CUSTOM02)
     bpy.utils.unregister_class(BUTTOM_CUSTOM03)
     bpy.utils.unregister_class(BUTTOM_CUSTOM04)
     bpy.utils.unregister_class(BUTTOM_CUSTOM05)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM06)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM07)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM08)
 
 if __name__ == "__main__":
     register()
