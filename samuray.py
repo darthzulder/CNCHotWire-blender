@@ -37,13 +37,19 @@ class funcs():
     wood_total_width = 0.141 + 8/1000
     wood_total_depth = 4.347
 
-    foam_block_cut_x = foam_block_x + cut_thickness
-    foam_block_cut_y = foam_block_y + cut_thickness
-    foam_block_cut_z = foam_block_z
-
     def __init__(self):
         self.select_before = None
-    
+
+    def setSizeBlock(self,context, x, y, z):
+        # Actualiza los valores introducidos por el usuario
+        self.foam_block_x = float(x)
+        self.foam_block_y = float(y)
+        self.foam_block_z = float(z)
+
+        context.scene.my_text_settings.my_text_property_x = ""
+        context.scene.my_text_settings.my_text_property_y = ""
+        context.scene.my_text_settings.my_text_property_z = ""
+
     def change_origin (self):
         #print(f"-------change_origin>{dir}")
         # store the location of current 3d cursor
@@ -351,6 +357,10 @@ class funcs():
 
         plane_size_high = (separation_z+0.5)
 
+        wood_heigh = self.wood_total_heigh
+        wood_width = self.wood_total_width
+        wood_depth = self.wood_total_depth
+
         faces_count_x = math.ceil(dimensions_X/separation_x)
         faces_count_y = math.ceil(dimensions_Y/separation_y)
 
@@ -359,11 +369,8 @@ class funcs():
             
         location_x = (dim_plane_x-1.5)/2
         location_y = (dim_plane_y-2)/2
-        location_z = (plane_size_high-0.5)/2
-
-        wood_heigh = self.wood_total_heigh
-        wood_width = self.wood_total_width
-        wood_depth = self.wood_total_depth
+        #location_z = (plane_size_high-0.5)/2
+        location_z = wood_heigh/2+wood_width #floor position
         
         # -----create primitive Plane as cutterPlane --Cuts in X--
         # change cursor location
@@ -411,10 +418,13 @@ class funcs():
         #print(f"-------crate_around_object>{dir}")
         # store the location of current 3d cursor
         saved_location = bpy.context.scene.cursor.location.xyz   # returns a vector
-        
-        foam_block_hight_x = self.foam_block_cut_x
-        foam_block_hight_y = self.foam_block_cut_y
-        foam_block_hight_z = self.foam_block_cut_z
+            
+        foam_block_hight_x = self.foam_block_x + self.cut_thickness
+        foam_block_hight_y = self.foam_block_y + self.cut_thickness
+        foam_block_hight_z = self.foam_block_z        
+
+        print(f"foam_block_hight_x:{foam_block_hight_x} foam_block_hight_y:{foam_block_hight_y} foam_block_hight_z:{foam_block_hight_z}")
+        print(f"foam_block_hight_x:{self.foam_block_x} foam_block_hight_y:{self.foam_block_y} foam_block_hight_z:{self.foam_block_z}")
 
         separation = self.cut_thickness
         # get object
@@ -423,9 +433,9 @@ class funcs():
         dimensions = selected_object.dimensions
         
         # get new origin coordinates
-        dimensions_X = dimensions.x
-        dimensions_Y = dimensions.y
-        dimensions_Z = dimensions.z   
+        dimensions_X = round(dimensions.x,1)
+        dimensions_Y = round(dimensions.y,1)
+        dimensions_Z = round(dimensions.z,1)   
 
         self.create_cutter_planes(dimensions_X,dimensions_Y,dimensions_Z,foam_block_hight_z,foam_block_hight_x,foam_block_hight_y,separation, scale = 1) 
         self.create_woods(dimensions_X,dimensions_Y,dimensions_Z,foam_block_hight_z,foam_block_hight_x,foam_block_hight_y, separation, scale = 1)
@@ -906,22 +916,32 @@ class funcs():
                 next_vert_z   = round(verts[i+1]['z'], 2)
                 #print(f'Vertex Z{i} : {actual_vert_z} == {next_vert_z} ?')
                 if  actual_vert_z == next_vert_z:
-                    width_wood=(round(verts[2]['x'],2) - round(verts[3]['x'],2))*scale
+                    width_wood=(round(verts[2]['x'],4) - round(verts[3]['x'],4))*scale
                     crease_step=width_wood/4 #for 3 creases
                     #print(f'vertex distance {i}:{verts[i].co.x} - {verts[i+1].co.x} = {width_wood}')
                     for j in range(1,4):
+                        #direction logic
                         if round(verts[i]['x'],2) > round(verts[i+1]['x'],2):
-                            #crease 01
-                            creases_up =  (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
-                            creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{"%.4f" % (z+crease_width)}A{rotation_z_degrees}\n')
-                            creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{"%.4f" % (z+crease_width)}A{rotation_z_degrees}\n')
-                            creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
+                            creases_top = coorZ
+                            #verif if is on floor
+                            if(float(coorZ)<=0):
+                                creases_bottom = 0
+                            else:
+                                creases_bottom = "%.4f" % (z+crease_width)
+                            creases_up =  (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{creases_top}A{rotation_z_degrees}\n')
+                            creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees}\n')
+                            creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees}\n')
+                            creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{creases_top}A{rotation_z_degrees}\n')
                             f.write(creases_up)
-                        elif round(verts[i]['x'],2) < round(verts[i+1]['x'],2):            
-                            #crease 01
+                        elif round(verts[i]['x'],2) < round(verts[i+1]['x'],2):
+                            creases_top = coorZ
+                            if(float(coorZ)<=0):
+                                creases_bottom = 0
+                            else:
+                                creases_bottom = "%.4f" % (z-crease_width)
                             creases_down =  (f'G01X{str("%.4f" % (x+(-j*crease_step+crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
-                            creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step+crease_width/2)))}Y{"%.4f" % (z-crease_width)}A{rotation_z_degrees}\n')
-                            creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step-crease_width/2)))}Y{"%.4f" % (z-crease_width)}A{rotation_z_degrees}\n')
+                            creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step+crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees}\n')
+                            creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step-crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees}\n')
                             creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step-crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
                             f.write(creases_down)
 
@@ -1603,19 +1623,164 @@ class funcs():
         # Add the created collection to the scene
         bpy.context.scene.collection.children.link(blocks_collection)
 
+    def change_scale(self, size):
+        # Obtener el objeto seleccionado
+        obj = bpy.context.active_object
+
+        # Obtener la malla de la duplicado
+        mesh = bpy.context.active_object.data
+
+        if mesh is not None and bpy.context.active_object.select_get():
+
+            bpy.ops.object.transform_apply(scale=True)
+
+            # Calcular el área actual del objeto 3D poligonal irregular
+            area_actual = self.get_total_area(mesh)
+
+            # Calcular la nueva escala para que el área total sea 500
+            nueva_escala = math.sqrt(float(size) / area_actual)
+
+            # Escalar el objeto con la nueva escala
+            obj.scale = (nueva_escala, nueva_escala, nueva_escala)
+
+            # Actualizar la malla después de la escala
+            bpy.ops.object.convert(target='MESH')
+            mesh = bpy.context.active_object.data
+
+            bpy.ops.object.transform_apply(scale=True)
+
+            # Calcular el nuevo área después de la escala
+            nueva_area = self.get_total_area(mesh)
+
+            # Imprimir los resultados
+            print(f"Área actual: {area_actual}")
+            print(f"Nueva escala: {nueva_escala}")
+            print(f"Nueva área: {nueva_area}")
+
+    def get_total_area(self, mesh=None):
+
+        if mesh is None and bpy.context.active_object.select_get():
+            mesh = bpy.context.active_object
+            print(mesh.data.name)
+            copy_obj = mesh.copy()
+            copy_obj.data = mesh.data.copy()
+            bpy.context.collection.objects.link(copy_obj)
+            
+            bpy.context.view_layer.objects.active = copy_obj
+            bpy.ops.object.convert(target='MESH')
+            bpy.ops.object.transform_apply(scale=True)
+            mesh_copy = copy_obj.data
+
+            me = copy_obj.to_mesh()
+            #me.transform(matrix)
+            bm = bmesh.new()
+            bm.from_mesh(me)
+
+            volume = bm.calc_volume(signed=True)
+            # --- Calcular el área actual del objeto 3D poligonal irregular
+            area = sum(polygon.area for polygon in mesh_copy.polygons)
+
+            # Eliminar la copia
+            bpy.data.objects.remove(copy_obj, do_unlink=True)
+
+            bpy.context.view_layer.objects.active = mesh
+        elif bpy.context.active_object.select_get():
+            # Calcular el área actual del objeto 3D poligonal irregular
+            area = sum(polygon.area for polygon in mesh.polygons)
+        else:
+            area = 0
+
+        print(area)
+        return area 
+
+myFunc = funcs()
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
+
+class INPUT_TEXT_01(bpy.types.PropertyGroup):
+    
+    my_text_property_x: bpy.props.StringProperty(
+        name="X", default="", description="Introduce un valor para X")
+
+    my_text_property_y: bpy.props.StringProperty(
+        name="Y", default="", description="Introduce un valor para Y")
+
+    my_text_property_z: bpy.props.StringProperty(
+        name="Z", default="", description="Introduce un valor para Z")
+    
+    my_text_property_area: bpy.props.StringProperty(
+        name="Z", default="", description="Introduce Area en metros cuadrados")
+    
+class BUTTOM_SET_AREA(bpy.types.Operator):
+    bl_label = "BUTTOM_SET_AREA"
+    bl_idname = "object.button_set_area"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+
+        area = context.scene.my_text_settings.my_text_property_area
+        func = myFunc
+        func.change_scale(area)
+        return {'FINISHED'}
+    
+class BUTTOM_GET_AREA(bpy.types.Operator):
+    bl_label = "BUTTOM_GET_AREA"
+    bl_idname = "object.button_get_area"
+
+    def execute(self, context):
+        func = myFunc
+        
+        context.scene.my_text_settings.my_text_property_area = str(round(func.get_total_area(),2))
+               
+        return {'FINISHED'}
+    
+class BUTTOM_SET_FOAM_SIZE(bpy.types.Operator):
+    bl_label = "BUTTOM_SET_FOAM_SIZE"
+    bl_idname = "object.button_buttom_set_foam_size"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+
+        x_value = context.scene.my_text_settings.my_text_property_x
+        y_value = context.scene.my_text_settings.my_text_property_y
+        z_value = context.scene.my_text_settings.my_text_property_z
+
+        func = myFunc
+        func.setSizeBlock(context, x_value, y_value, z_value)
+        print(f"Valores introducidos: X={x_value}, Y={y_value}, Z={z_value}")
+        print(f"Valores Recuperados: X={func.foam_block_x}, Y={func.foam_block_y}, Z={func.foam_block_z}")
+        return {'FINISHED'}
+
+class BUTTOM_SET_FOAM_DEFAULT(bpy.types.Operator):
+    bl_label = "BUTTOM_SET_FOAM_DEFAULT"
+    bl_idname = "object.button_buttom_set_foam_default"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        func = myFunc
+
+        x_value = funcs.foam_block_x
+        y_value = funcs.foam_block_y
+        z_value = funcs.foam_block_z
+        
+        func.setSizeBlock(context, x_value, y_value, z_value)
+        print(f"Valores introducidos: X={x_value}, Y={y_value}, Z={z_value}")
+        print(f"Valores Recuperados: X={func.foam_block_x}, Y={func.foam_block_y}, Z={func.foam_block_z}")
+        return {'FINISHED'}
+
+
 class BUTTOM_CUSTOM01(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM01_Prepare"
     bl_idname = "object.button_custom01"
     bl_options = {'UNDO'}
 
     def execute(self, context):
-        funcion = funcs()
+        funcion = myFunc
+        print(f"Valores Recuperados BTN01: X={funcion.foam_block_x}, Y={funcion.foam_block_y}, Z={funcion.foam_block_z}")
         funcion.crate_around_object()
         
-        print("execute button01 custom ok!")
+        print("execute button01 ---custom ok!")
 
         return {'FINISHED'}
     
@@ -1626,7 +1791,7 @@ class BUTTOM_CUSTOM02(bpy.types.Operator):
 
     def execute(self, context):
         
-        funcion = funcs()
+        funcion = myFunc
         funcion.cut_and_order_parts()
         
         print("execute button02 custom ok!")
@@ -1753,8 +1918,36 @@ class BUTTOM_CUSTOM08(bpy.types.Operator):
 # PANEL UI (PART 1 DRAW)
 ####################################################
 
-class PANEL_CUSTOM_UI_01(bpy.types.Panel):
+class PANEL_CUSTOM_UI_00(bpy.types.Panel):
     bl_label = "Prepare Irregular Model"
+    bl_idname = "OBJECT_PT_panel_00"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Panel Custom UI"
+
+    def draw(self, context):
+        layout = self.layout
+
+        func = myFunc
+
+        # Muestra los valores actuales en labels
+        row = layout.row()
+        row.label(text=f"Cambiar Area Total")
+
+        # add text input for Z
+        row = layout.row()
+        row.prop(context.scene.my_text_settings, "my_text_property_area", text="Area")
+        
+        # add button custom
+        row = layout.row()
+        row.operator(BUTTOM_SET_AREA.bl_idname, text="Set Area")
+
+        # add button custom
+        row = layout.row()
+        row.operator(BUTTOM_GET_AREA.bl_idname, text="Get Area")
+
+class PANEL_CUSTOM_UI_01(bpy.types.Panel):
+    bl_label = "Prepare Cut Model"
     bl_idname = "OBJECT_PT_panel_01"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -1763,6 +1956,34 @@ class PANEL_CUSTOM_UI_01(bpy.types.Panel):
     def draw(self, context):
         #variables
         layout = self.layout
+
+        func = myFunc
+
+        # Muestra los valores actuales en labels
+        row = layout.row()
+        row.label(text=f"Cube Size:")
+        row = layout.row()
+        row.label(text=f"X={func.foam_block_x}, Y={func.foam_block_y}, Z={func.foam_block_z}")
+
+        # add text input for X
+        row = layout.row()
+        row.prop(context.scene.my_text_settings, "my_text_property_x", text="X")
+
+        # add text input for Y
+        row = layout.row()
+        row.prop(context.scene.my_text_settings, "my_text_property_y", text="Y")
+
+        # add text input for Z
+        row = layout.row()
+        row.prop(context.scene.my_text_settings, "my_text_property_z", text="Z")
+
+        # add button custom
+        row = layout.row()
+        row.operator(BUTTOM_SET_FOAM_SIZE.bl_idname, text="Set Size")
+
+        # add button custom
+        row = layout.row()
+        row.operator(BUTTOM_SET_FOAM_DEFAULT.bl_idname, text="Default Size")
 
         #create simple row
         row01 = layout.row()
@@ -1870,9 +2091,16 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
 # REGISTER (PART 2)
 ####################################################
 def register():
+    bpy.utils.register_class(PANEL_CUSTOM_UI_00)
     bpy.utils.register_class(PANEL_CUSTOM_UI_01)
     bpy.utils.register_class(PANEL_CUSTOM_UI_02)
     bpy.utils.register_class(PANEL_CUSTOM_UI_03)
+    bpy.utils.register_class(INPUT_TEXT_01)
+    bpy.types.Scene.my_text_settings = bpy.props.PointerProperty(type=INPUT_TEXT_01)
+    bpy.utils.register_class(BUTTOM_SET_AREA)
+    bpy.utils.register_class(BUTTOM_GET_AREA)
+    bpy.utils.register_class(BUTTOM_SET_FOAM_SIZE)
+    bpy.utils.register_class(BUTTOM_SET_FOAM_DEFAULT)
     bpy.utils.register_class(BUTTOM_CUSTOM01)
     bpy.utils.register_class(BUTTOM_CUSTOM02)
     bpy.utils.register_class(BUTTOM_CUSTOM03)
@@ -1883,9 +2111,16 @@ def register():
     bpy.utils.register_class(BUTTOM_CUSTOM08)
 
 def unregister():
+    bpy.utils.unregister_class(PANEL_CUSTOM_UI_00)
     bpy.utils.unregister_class(PANEL_CUSTOM_UI_01)
     bpy.utils.unregister_class(PANEL_CUSTOM_UI_02)
     bpy.utils.unregister_class(PANEL_CUSTOM_UI_03)
+    bpy.utils.unregister_class(INPUT_TEXT_01)
+    del bpy.types.Scene.my_text_settings
+    bpy.utils.unregister_class(BUTTOM_SET_AREA)
+    bpy.utils.unregister_class(BUTTOM_GET_AREA)
+    bpy.utils.unregister_class(BUTTOM_SET_FOAM_SIZE)
+    bpy.utils.unregister_class(BUTTOM_SET_FOAM_DEFAULT)
     bpy.utils.unregister_class(BUTTOM_CUSTOM01)
     bpy.utils.unregister_class(BUTTOM_CUSTOM02)
     bpy.utils.unregister_class(BUTTOM_CUSTOM03)
