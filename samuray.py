@@ -5,7 +5,7 @@ bl_info = {
     "name": "CNC HotWire Preparetion",
     "description": "Change origin Position ",
     "author": "nbravo",
-    "version": (1, 1),
+    "version": (1, 2),
     "blender": (2, 93, 1),
     "location": "View3D > UI",
     "warning":"(in ALFA production)",
@@ -16,6 +16,7 @@ bl_info = {
 import bpy
 import bmesh
 import math
+import re
 from mathutils import Vector
 #from . import funcs
 import os, errno
@@ -37,6 +38,10 @@ class funcs():
     wood_total_width = 0.141 + 8/1000
     wood_total_depth = 4.347
 
+    volume_total_irregular = 0
+    volume_total_cubes = 1
+    quantity_cubes = 0
+
     def __init__(self):
         self.select_before = None
 
@@ -49,6 +54,8 @@ class funcs():
         context.scene.my_text_settings.my_text_property_x = ""
         context.scene.my_text_settings.my_text_property_y = ""
         context.scene.my_text_settings.my_text_property_z = ""
+
+        print(f"Valores introducidos: X={x}, Y={y}, Z={z}")
 
     def change_origin (self):
         #print(f"-------change_origin>{dir}")
@@ -414,17 +421,22 @@ class funcs():
         bpy.ops.object.modifier_apply(modifier=array_modifier_Y1.name)
         bpy.ops.object.modifier_apply(modifier=array_modifier_X1.name)
 
-    def crate_around_object (self, scale = 1):
+    def crate_around_object (self, context, scale = 1):
         #print(f"-------crate_around_object>{dir}")
         # store the location of current 3d cursor
         saved_location = bpy.context.scene.cursor.location.xyz   # returns a vector
             
-        foam_block_hight_x = self.foam_block_x + self.cut_thickness
-        foam_block_hight_y = self.foam_block_y + self.cut_thickness
-        foam_block_hight_z = self.foam_block_z        
 
-        print(f"foam_block_hight_x:{foam_block_hight_x} foam_block_hight_y:{foam_block_hight_y} foam_block_hight_z:{foam_block_hight_z}")
-        print(f"foam_block_hight_x:{self.foam_block_x} foam_block_hight_y:{self.foam_block_y} foam_block_hight_z:{self.foam_block_z}")
+        x_value = context.scene.my_number_settings.my_number_property_foam_block_x
+        y_value = context.scene.my_number_settings.my_number_property_foam_block_y
+        z_value = context.scene.my_number_settings.my_number_property_foam_block_z
+
+        foam_block_hight_x = x_value + self.cut_thickness
+        foam_block_hight_y = y_value + self.cut_thickness
+        foam_block_hight_z = z_value        
+
+        print(f"from context foam_block_hight_x:{foam_block_hight_x} foam_block_hight_y:{foam_block_hight_y} foam_block_hight_z:{foam_block_hight_z}")
+        print(f"from self foam_block_hight_x:{self.foam_block_x} foam_block_hight_y:{self.foam_block_y} foam_block_hight_z:{self.foam_block_z}")
 
         separation = self.cut_thickness
         # get object
@@ -450,11 +462,11 @@ class funcs():
         # set 3dcursor location back to the stored location
         bpy.context.scene.cursor.location = saved_location
     
-    def cut_object(self):
+    def cut_object(self, context):
 
-        foam_size_X = self.foam_block_x
-        foam_size_Y = self.foam_block_y
-        foam_size_Z = self.foam_block_z
+        foam_size_X = context.scene.my_number_settings.my_number_property_foam_block_x
+        foam_size_Y = context.scene.my_number_settings.my_number_property_foam_block_y
+        foam_size_Z = context.scene.my_number_settings.my_number_property_foam_block_z
 
         separation = self.cut_thickness
 
@@ -521,7 +533,7 @@ class funcs():
 
         self.create_block_greed(dimensions_X,dimensions_Y,dimensions_Z,foam_size_X, foam_size_Y, foam_size_Z, separation, scale = 1)
 
-    def cut_and_order_parts(self):
+    def cut_and_order_parts(self, context):
         print('******inner_part_verif***********')
         #save state in case of error
         bpy.ops.ed.undo_push(message="inner_part_verif Function")
@@ -533,7 +545,7 @@ class funcs():
         #fix location in z to pass the inner verification, if z location is 0 may have conflict to check if is inside the cube due the cube Z location is 0
         if bpy.context.active_object.location.z == 0: bpy.context.active_object.location.z=+0.0001
 
-        self.cut_object()
+        self.cut_object(context)
         # Get a list of all cube objects and irregular objects in the scene
         objects_cube      = [object for object in bpy.data.objects if object.name.startswith(f"{cubes_name}.")]
         objects_irregular = [object for object in bpy.data.objects if object.name.startswith(f"{object_selected_name}.")]
@@ -541,6 +553,8 @@ class funcs():
         # Dictionary to store the relationship between cube objects and irregular objects
         relation_cube_irregular = {}
 
+        
+        vol_cubo_obj = abs(context.scene.my_number_settings.my_number_property_foam_block_x*context.scene.my_number_settings.my_number_property_foam_block_y*context.scene.my_number_settings.my_number_property_foam_block_z)
             
         for object_cube in objects_cube:
             # # Get the world coordinates bounding-box-points of object_cube
@@ -573,17 +587,20 @@ class funcs():
             #Delete cube if don't have nothing inside            
             if have_something_inside == 0:
                 bpy.data.objects.remove(object_cube, do_unlink=True)
-
+        
+        volumen_total_irregular_obj = 0
+        volumen_total_cube_obj = 0
+        quantity_cube_obj = 0
         for object_irregular, object_cube in (relation_cube_irregular.items()):
             #set objects                 
             object_irregular_obj = bpy.data.objects[object_irregular]
-            object_cube_obj = bpy.data.objects[object_cube]   
+            object_cube_obj = bpy.data.objects[object_cube]  
 
             #lock modification but Z rotation
-            object_irregular_obj.lock_rotation= (True, True, False)
+            object_irregular_obj.lock_rotation = (True, True, False)
             object_irregular_obj.lock_location = (True, True, True)
             object_irregular_obj.lock_scale = (True, True, True)
-            object_cube_obj.lock_rotation= (True, True, False)
+            object_cube_obj.lock_rotation = (True, True, False)
             object_cube_obj.lock_location = (True, True, True)
             object_cube_obj.lock_scale = (True, True, True)
             object_cube_obj.hide_select = True                
@@ -613,11 +630,17 @@ class funcs():
 
                 original_collection = object_cube_obj.users_collection[0]
                 original_collection.objects.unlink(object_cube_obj)
-                blocks_collection.objects.link(object_cube_obj)            
-
+                blocks_collection.objects.link(object_cube_obj)                
+                
                 original_collection = object_irregular_obj.users_collection[0]
                 original_collection.objects.unlink(object_irregular_obj)
                 blocks_collection.objects.link(object_irregular_obj)
+
+                vol_irregular = abs(self.get_total_area_vol(object_irregular_obj)[1])
+                volumen_total_irregular_obj = volumen_total_irregular_obj + vol_irregular
+                volumen_total_cube_obj = volumen_total_cube_obj + vol_cubo_obj
+                quantity_cube_obj = quantity_cube_obj + 1
+                print(f'---------Volumen del irregular {object_irregular_obj.name} = {vol_irregular} | {vol_cubo_obj}')
 
                 original_collection = areaCNC.users_collection[0]
                 original_collection.objects.unlink(areaCNC)
@@ -636,13 +659,20 @@ class funcs():
                 original_collection.objects.unlink(object_irregular_obj)
                 object_cube_obj.users_collection[0].objects.link(object_irregular_obj)
                 #bpy.context.scene.collection.children.link(blocks_collection)
-            if object_irregular_obj.location.z < self.foam_block_z :
-                self.cut_wood(object_irregular_obj,'x')
-                self.cut_wood(object_irregular_obj,'y')
+            if object_irregular_obj.location.z < context.scene.my_number_settings.my_number_property_foam_block_z :
+                self.cut_wood(context, object_irregular_obj,'x')
+                self.cut_wood(context, object_irregular_obj,'y')
             #----create STL file of irregular object
             collection_name = object_irregular_obj.users_collection[0].name
-            self.export_to_stl_origin(collection_name,collection_name,"irregObjPart.")
+            self.export_to_stl_origin(context,collection_name,collection_name,"irregObjPart.")
+        print(f'---------Volumen Total del irregular = {volumen_total_irregular_obj}')
+        print(f'---------Volumen Total del cubes = {volumen_total_cube_obj}')
+        #vol_used = volumen_total_irregular_obj / volumen_total_cube_obj * 100
+        #print(f'---------Volumen Used = {round(vol_used,2)}%')
 
+        context.scene.my_number_settings.my_number_property_volume_total_irregular = volumen_total_irregular_obj
+        context.scene.my_number_settings.my_number_property_volume_total_cubes = volumen_total_cube_obj
+        context.scene.my_number_settings.my_number_property_quantity_cubes = quantity_cube_obj
         #except Exception as e:
             #print("Error Custon Function, UNDO:", e)
             # UnDo in case of error
@@ -861,16 +891,16 @@ class funcs():
         scale=1000
         i=0
         if wood == 'X':
-            pathFileName=".\\"+collection_name+"\\"+collection_name+"_WX."
+            pathFileName=".\\PARTES\\"+collection_name+"\\"+collection_name+"_WX."
         elif wood == 'Y':
-            pathFileName=".\\"+collection_name+"\\"+collection_name+"_WY."
+            pathFileName=".\\PARTES\\"+collection_name+"\\"+collection_name+"_WY."
         else:
-            pathFileName=".\\"+collection_name+"\\"+collection_name+"."
+            pathFileName=".\\PARTES\\"+collection_name+"\\"+collection_name+"."
             
         pathFileNumber=pathFileName+'%03d' % i +"_samurai.nc"
         #create .nc file 
         try:
-            os.makedirs(".\\"+collection_name, exist_ok=True)
+            os.makedirs(".\\PARTES\\"+collection_name, exist_ok=True)
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
@@ -1325,7 +1355,7 @@ class funcs():
         #bpy.context.active_object.name = irregular_obj[0].name
         bpy.context.view_layer.objects.active = irregular_obj[0]
 
-    def cut_wood(self, selected_obj=False, wood_axis='x'):
+    def cut_wood(self, context,  selected_obj=False, wood_axis='x'):
         #identify and choose collection union
         #print('CUT_WOOD--START')
         if selected_obj:
@@ -1350,18 +1380,19 @@ class funcs():
 
         # Create a second plane to serve as the silhouette cutter
         distance_to_plane=0.025
-        bpy.ops.mesh.primitive_plane_add(size=2)
+        bpy.ops.mesh.primitive_plane_add(size=1)
         silhouette_wood = bpy.context.object
         silhouette_wood.name = "siluete_wood_"+wood_axis+".001"
         if wood_axis == 'y':
-            silhouette_wood.scale.y = 0.5
+            silhouette_wood.scale = (context.scene.my_number_settings.my_number_property_foam_block_x, context.scene.my_number_settings.my_number_property_foam_block_y,0 )
             silhouette_wood.rotation_euler = (0, math.radians(90), 0)
             distance_to_plane=0
         else:
+            silhouette_wood.scale = (context.scene.my_number_settings.my_number_property_foam_block_x, context.scene.my_number_settings.my_number_property_foam_block_y,0 )
             silhouette_wood.rotation_euler = (math.radians(90), 0, 0)
         silhouette_wood.location.y=objects_cube[0].location.y+distance_to_plane
         bpy.ops.object.transform_apply(scale=True,location=False)
-        
+
         #change silhouette collection to actual collection.    
         siluete_collection = silhouette_wood.users_collection[0]
         siluete_collection.objects.unlink(silhouette_wood)
@@ -1461,13 +1492,24 @@ class funcs():
         bpy.data.objects.remove(silhouette_wood, do_unlink=True)
         #print('CUT_WOOD--END')
 
-    def export_gcode_raw(self):
+    def export_gcode_raw(self, context):
         selected_object = bpy.context.selected_objects[0]
         #get colection name
         collection_name = selected_object.users_collection[0].name
         #get irregular object
         irregular_obj = [obj for obj in bpy.data.objects if obj.name.startswith("irregObjPart.") and collection_name in obj.users_collection[0].name]        
+
+        #--Delete all cut-files that have been created before for this collection
+        folder_path = ".\\PARTES\\"+collection_name
         
+        pattern = r"^{0}\.\d{{3}}_samurai\.nc$".format(re.escape(collection_name))
+
+        print(f'pattern===>{pattern}')
+        for filename in os.listdir(folder_path):
+            if re.match(pattern, filename):
+                file_path = os.path.join(folder_path, filename)
+                os.remove(file_path)
+
         for gcode_dict in irregular_obj[0]['customVar']:
             collection_name = gcode_dict['collection_name']
             verts = gcode_dict['vertex_list']
@@ -1480,16 +1522,21 @@ class funcs():
         #reset rotation of irregular object
         irregular_obj[0].rotation_euler.z = math.radians(0)
 
-        self.export_to_stl_origin(collection_name,collection_name+'_raw',"foamBlock.")
+        self.export_to_stl_origin(context,collection_name,collection_name+'_raw',"foamBlock.")
 
-    def export_to_stl_origin(self,collection_name,stl_name,obj_name_base):
+    def export_to_stl_origin(self,context,collection_name,stl_name,obj_name_base):
+
         scale_for_powermill=1000
+        foam_x = context.scene.my_number_settings.my_number_property_foam_block_x
+        foam_y = context.scene.my_number_settings.my_number_property_foam_block_y
+        foam_z = context.scene.my_number_settings.my_number_property_foam_block_z
+
         try:
-            os.makedirs(".\\"+collection_name, exist_ok=True)  
+            os.makedirs(".\\PARTES\\"+collection_name, exist_ok=True)  
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
-        output_path=".\\"+collection_name+"\\"+stl_name+".stl"
+        output_path=".\\PARTES\\"+collection_name+"\\"+stl_name+".stl"
         #get foamBlock object
         objective_object = [obj for obj in bpy.data.objects if obj.name.startswith(obj_name_base) and collection_name in obj.users_collection[0].name]
         
@@ -1529,18 +1576,18 @@ class funcs():
         objective_object[0].rotation_euler.x = math.radians(0)'''
 
 
-        # - Rotate elements related to the middle of he object -
+        # - Rotate elements related to the middle of he object (for little parts floating in Z)-
         objective_object[0].location.x = 0
-        if(objective_object[0].location.y < middle_pos):
+        if(objective_object[0].location.y < middle_pos and objective_object[0].location.z < foam_z):
             objective_object[0].location.y = -0.49 #0
             objective_object[0].location.z = 0.49 #0
             objective_object[0].rotation_euler.x = math.radians(-90) #0
-            #print("giro Izq")
-        elif(objective_object[0].location.y > middle_pos):
+            print("giro Izq")
+        elif(objective_object[0].location.y > middle_pos and objective_object[0].location.z < foam_z):
             objective_object[0].location.y = 0.49 #0
             objective_object[0].location.z = 0.49 #0
             objective_object[0].rotation_euler.x = math.radians(90) #0
-            #print("giro Der")
+            print("giro Der")
 
         # ------- Fix Faces -------
         # go edit mode
@@ -1565,18 +1612,18 @@ class funcs():
             objective_object[0].hide_select = True
         bpy.ops.object.select_all(action='DESELECT')
 
-    def create_block_apart(self, scale = 1):
+    def create_block_apart(self, context,  scale = 1):
 
         selected_object_active = bpy.context.active_object
         selected_objects = bpy.context.selected_objects
 
         # create primitive cube as foamBlock
         # change cursor location
-        bpy.context.scene.cursor.location =(selected_object_active.location.x,selected_object_active.location.y,self.foam_block_z/2)
+        bpy.context.scene.cursor.location =(selected_object_active.location.x,selected_object_active.location.y,context.scene.my_number_settings.my_number_property_foam_block_z/2)
         bpy.ops.mesh.primitive_cube_add(size=scale)
         foamBlock = bpy.context.object        
         foamBlock.name = "foamBlock.001"
-        foamBlock.dimensions = (self.foam_block_x, self.foam_block_y, self.foam_block_z)
+        foamBlock.dimensions = (context.scene.my_number_settings.my_number_property_foam_block_x, context.scene.my_number_settings.my_number_property_foam_block_y, context.scene.my_number_settings.my_number_property_foam_block_z)
         bpy.ops.object.transform_apply(scale=True)
 
         # change cursor location
@@ -1635,7 +1682,7 @@ class funcs():
             bpy.ops.object.transform_apply(scale=True)
 
             # Calcular el área actual del objeto 3D poligonal irregular
-            area_actual = self.get_total_area(mesh)
+            area_actual = self.get_total_area_vol(mesh)[0]
 
             # Calcular la nueva escala para que el área total sea 500
             nueva_escala = math.sqrt(float(size) / area_actual)
@@ -1650,15 +1697,14 @@ class funcs():
             bpy.ops.object.transform_apply(scale=True)
 
             # Calcular el nuevo área después de la escala
-            nueva_area = self.get_total_area(mesh)
+            nueva_area = self.get_total_area_vol(mesh)[0]
 
             # Imprimir los resultados
             print(f"Área actual: {area_actual}")
             print(f"Nueva escala: {nueva_escala}")
             print(f"Nueva área: {nueva_area}")
 
-    def get_total_area(self, mesh=None):
-
+    def get_total_area_vol(self, mesh = None):
         if mesh is None and bpy.context.active_object.select_get():
             mesh = bpy.context.active_object
             print(mesh.data.name)
@@ -1671,12 +1717,15 @@ class funcs():
             bpy.ops.object.transform_apply(scale=True)
             mesh_copy = copy_obj.data
 
+            # calc the volume
             me = copy_obj.to_mesh()
             #me.transform(matrix)
             bm = bmesh.new()
             bm.from_mesh(me)
 
             volume = bm.calc_volume(signed=True)
+            bm.free()
+            #print('*volume*', volume)
             # --- Calcular el área actual del objeto 3D poligonal irregular
             area = sum(polygon.area for polygon in mesh_copy.polygons)
 
@@ -1687,13 +1736,45 @@ class funcs():
         elif bpy.context.active_object.select_get():
             # Calcular el área actual del objeto 3D poligonal irregular
             area = sum(polygon.area for polygon in mesh.polygons)
+            volume = 1 #add volume logic here
+        elif mesh is not None:
+            print(f'nombre----{mesh.name}')
+            mesh = bpy.data.objects[mesh.name]
+            copy_obj = mesh.copy()
+            copy_obj.data = mesh.data.copy()
+            bpy.context.collection.objects.link(copy_obj)
+            
+            bpy.context.view_layer.objects.active = copy_obj
+            copy_obj.hide_select = False
+            copy_obj.select_set(True)
+            bpy.ops.object.convert(target='MESH')
+            bpy.ops.object.transform_apply(scale=True)
+            mesh_copy = copy_obj.data
+
+            # calc the volume
+            me = copy_obj.to_mesh()
+            #me.transform(matrix)
+            bm = bmesh.new()
+            bm.from_mesh(me)
+
+            volume = bm.calc_volume(signed=True)
+            bm.free()
+            #print('*volume*', volume)
+            # --- Calcular el área actual del objeto 3D poligonal irregular
+            area = sum(polygon.area for polygon in mesh_copy.polygons)
+
+            # Eliminar la copia
+            bpy.data.objects.remove(copy_obj, do_unlink=True)
+            #area = 2
+            #volume = 2 #add volume logic here
         else:
             area = 0
+            volume = 0 #add volume logic here
 
         print(area)
-        return area 
+        return area, volume
 
-myFunc = funcs()
+#myFunc = funcs()
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
@@ -1712,6 +1793,29 @@ class INPUT_TEXT_01(bpy.types.PropertyGroup):
     my_text_property_area: bpy.props.StringProperty(
         name="Z", default="", description="Introduce Area en metros cuadrados")
     
+class INPUT_NUMBER_01(bpy.types.PropertyGroup):
+
+    my_number_property_foam_block_x: bpy.props.FloatProperty(
+        name="foam_block_x", default=1.410, description="Valor X para el bloque de Foam")
+    
+    my_number_property_foam_block_y: bpy.props.FloatProperty(
+        name="foam_block_y", default=0.980, description="Valor Y para el bloque de Foam")
+    
+    my_number_property_foam_block_z: bpy.props.FloatProperty(
+        name="foam_block_z", default=1.180, description="Valor Z para el bloque de Foam")
+    
+    my_number_property_cut_thickness: bpy.props.FloatProperty(
+        name="cut_thickness", default=1.180, description="Valor X para el bloque de Foam")
+
+    my_number_property_volume_total_irregular: bpy.props.FloatProperty(
+        name="volume_total_irregular", default=0, description="Volumen total de la superficie irregular")
+    
+    my_number_property_volume_total_cubes: bpy.props.FloatProperty(
+        name="volume_total_cubes", default=1, description="Valumen total de los bloques Foam")
+    
+    my_number_property_quantity_cubes: bpy.props.FloatProperty(
+        name="quantity_cubes", default=0, description="Cantidad de bloques Foam usados aproximadamente")
+    
 class BUTTOM_SET_AREA(bpy.types.Operator):
     bl_label = "BUTTOM_SET_AREA"
     bl_idname = "object.button_set_area"
@@ -1720,7 +1824,8 @@ class BUTTOM_SET_AREA(bpy.types.Operator):
     def execute(self, context):
 
         area = context.scene.my_text_settings.my_text_property_area
-        func = myFunc
+        #func = myFunc        
+        func = funcs()
         func.change_scale(area)
         return {'FINISHED'}
     
@@ -1729,9 +1834,10 @@ class BUTTOM_GET_AREA(bpy.types.Operator):
     bl_idname = "object.button_get_area"
 
     def execute(self, context):
-        func = myFunc
+        #func = myFunc
+        func = funcs()
         
-        context.scene.my_text_settings.my_text_property_area = str(round(func.get_total_area(),2))
+        context.scene.my_text_settings.my_text_property_area = str(round(func.get_total_area_vol()[0],2))
                
         return {'FINISHED'}
     
@@ -1742,12 +1848,19 @@ class BUTTOM_SET_FOAM_SIZE(bpy.types.Operator):
 
     def execute(self, context):
 
-        x_value = context.scene.my_text_settings.my_text_property_x
-        y_value = context.scene.my_text_settings.my_text_property_y
-        z_value = context.scene.my_text_settings.my_text_property_z
+        x_value = float(context.scene.my_text_settings.my_text_property_x)
+        y_value = float(context.scene.my_text_settings.my_text_property_y)
+        z_value = float(context.scene.my_text_settings.my_text_property_z)
 
-        func = myFunc
+        context.scene.my_number_settings.my_number_property_foam_block_x = x_value
+        context.scene.my_number_settings.my_number_property_foam_block_y = y_value
+        context.scene.my_number_settings.my_number_property_foam_block_z = z_value
+
+        #func = myFunc
+        func = funcs()
+
         func.setSizeBlock(context, x_value, y_value, z_value)
+
         print(f"Valores introducidos: X={x_value}, Y={y_value}, Z={z_value}")
         print(f"Valores Recuperados: X={func.foam_block_x}, Y={func.foam_block_y}, Z={func.foam_block_z}")
         return {'FINISHED'}
@@ -1758,11 +1871,17 @@ class BUTTOM_SET_FOAM_DEFAULT(bpy.types.Operator):
     bl_options = {'UNDO'}
 
     def execute(self, context):
-        func = myFunc
+        #func = myFunc
+        func = funcs()
 
-        x_value = funcs.foam_block_x
-        y_value = funcs.foam_block_y
-        z_value = funcs.foam_block_z
+        x_value = round(func.foam_block_x, 2) 
+        y_value = round(func.foam_block_y, 2) 
+        z_value = round(func.foam_block_z, 2)
+
+        
+        context.scene.my_number_settings.my_number_property_foam_block_x = x_value
+        context.scene.my_number_settings.my_number_property_foam_block_y = y_value
+        context.scene.my_number_settings.my_number_property_foam_block_z = z_value
         
         func.setSizeBlock(context, x_value, y_value, z_value)
         print(f"Valores introducidos: X={x_value}, Y={y_value}, Z={z_value}")
@@ -1776,9 +1895,15 @@ class BUTTOM_CUSTOM01(bpy.types.Operator):
     bl_options = {'UNDO'}
 
     def execute(self, context):
-        funcion = myFunc
-        print(f"Valores Recuperados BTN01: X={funcion.foam_block_x}, Y={funcion.foam_block_y}, Z={funcion.foam_block_z}")
-        funcion.crate_around_object()
+        #func = myFunc
+        func = funcs()
+
+        x_value = context.scene.my_number_settings.my_number_property_foam_block_x
+        y_value = context.scene.my_number_settings.my_number_property_foam_block_y
+        z_value = context.scene.my_number_settings.my_number_property_foam_block_z
+
+        print(f"Valores Recuperados BTN01: X={x_value}, Y={y_value}, Z={z_value}")
+        func.crate_around_object(context)
         
         print("execute button01 ---custom ok!")
 
@@ -1791,8 +1916,9 @@ class BUTTOM_CUSTOM02(bpy.types.Operator):
 
     def execute(self, context):
         
-        funcion = myFunc
-        funcion.cut_and_order_parts()
+        #func = myFunc
+        func = funcs()
+        func.cut_and_order_parts(context)
         
         print("execute button02 custom ok!")
 
@@ -1860,7 +1986,7 @@ class BUTTOM_CUSTOM05(bpy.types.Operator):
     def execute(self, context):
         
         funcion = funcs()
-        funcion.export_gcode_raw()
+        funcion.export_gcode_raw(context)
 
         print("execute button05 custom ok!")
 
@@ -1924,11 +2050,10 @@ class PANEL_CUSTOM_UI_00(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Panel Custom UI"
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
-
-        func = myFunc
 
         # Muestra los valores actuales en labels
         row = layout.row()
@@ -1957,13 +2082,26 @@ class PANEL_CUSTOM_UI_01(bpy.types.Panel):
         #variables
         layout = self.layout
 
-        func = myFunc
+        #func = myFunc
+        func = funcs()
+
+        x = round(context.scene.my_number_settings.my_number_property_foam_block_x,2)
+        y = round(context.scene.my_number_settings.my_number_property_foam_block_y,2)
+        z = round(context.scene.my_number_settings.my_number_property_foam_block_z,2)
+
+        vol_total_irreg= round(context.scene.my_number_settings.my_number_property_volume_total_irregular,2)
+        vol_total_cube= round(context.scene.my_number_settings.my_number_property_volume_total_cubes,2)
+        vol_total_quantity= round(context.scene.my_number_settings.my_number_property_quantity_cubes,2)
+
+        '''volume_total_irregular = volumen_total_irregular_obj
+        volume_total_cubes = volumen_total_cube_obj
+        quantity_cubes = quantity_cube_obj'''
 
         # Muestra los valores actuales en labels
         row = layout.row()
         row.label(text=f"Cube Size:")
         row = layout.row()
-        row.label(text=f"X={func.foam_block_x}, Y={func.foam_block_y}, Z={func.foam_block_z}")
+        row.label(text=f"X={x}, Y={y}, Z={z}")
 
         # add text input for X
         row = layout.row()
@@ -1992,7 +2130,7 @@ class PANEL_CUSTOM_UI_01(bpy.types.Panel):
         # add button custom
         row01 = layout.row()
         row01.scale_y = 2
-        row01.operator("object.button_custom01", text= "Prepare Work Area", icon = "GRID")
+        row01.operator(BUTTOM_CUSTOM01.bl_idname, text= "Prepare Work Area", icon = "GRID")
 
         #create simple row
         row02 = layout.row()
@@ -2003,16 +2141,47 @@ class PANEL_CUSTOM_UI_01(bpy.types.Panel):
         row02.scale_y = 2
         row02.operator("object.button_custom02", text= "Prepare Cuts in CNC Hot Wire", icon = "IMGDISPLAY")
 
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"-------------------VOLUMENES----------------------")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Volume Isla: {round(vol_total_irreg,2)} m3")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Cubos Completos Usados: {vol_total_quantity} cubos")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Volume Cubos Completos Usados: {round(vol_total_cube,2)} m3")
+
+        vol_used=round((vol_total_irreg/vol_total_cube)*100,2)
+        cubes_used=round(vol_used/100 * vol_total_quantity,2)
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Porcentaje real cubos usados: {vol_used}%")
+        
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Cantidad real cubos usados: {cubes_used} cubos")
+
 class PANEL_CUSTOM_UI_02(bpy.types.Panel):
     bl_label = "CNC Hot-Wire"
     bl_idname = "OBJECT_PT_panel_02"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Panel Custom UI"
+    bl_category = "Panel Custom UI"    
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         #variables
         layout = self.layout
+
+        #create simple row
+        row01 = layout.row()
+        row01.label(text = "Oculte las partes no usadas")
 
         #create simple row
         row01 = layout.row()
@@ -2047,6 +2216,7 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Panel Custom UI"
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         #variables
@@ -2096,7 +2266,9 @@ def register():
     bpy.utils.register_class(PANEL_CUSTOM_UI_02)
     bpy.utils.register_class(PANEL_CUSTOM_UI_03)
     bpy.utils.register_class(INPUT_TEXT_01)
-    bpy.types.Scene.my_text_settings = bpy.props.PointerProperty(type=INPUT_TEXT_01)
+    bpy.utils.register_class(INPUT_NUMBER_01)
+    bpy.types.Scene.my_text_settings = bpy.props.PointerProperty(type=INPUT_TEXT_01)    
+    bpy.types.Scene.my_number_settings = bpy.props.PointerProperty(type=INPUT_NUMBER_01)
     bpy.utils.register_class(BUTTOM_SET_AREA)
     bpy.utils.register_class(BUTTOM_GET_AREA)
     bpy.utils.register_class(BUTTOM_SET_FOAM_SIZE)
@@ -2116,7 +2288,9 @@ def unregister():
     bpy.utils.unregister_class(PANEL_CUSTOM_UI_02)
     bpy.utils.unregister_class(PANEL_CUSTOM_UI_03)
     bpy.utils.unregister_class(INPUT_TEXT_01)
+    bpy.utils.unregister_class(INPUT_NUMBER_01)
     del bpy.types.Scene.my_text_settings
+    del bpy.types.Scene.my_number_settings
     bpy.utils.unregister_class(BUTTOM_SET_AREA)
     bpy.utils.unregister_class(BUTTOM_GET_AREA)
     bpy.utils.unregister_class(BUTTOM_SET_FOAM_SIZE)
@@ -2132,6 +2306,7 @@ def unregister():
 
 if __name__ == "__main__":
     register()
+    #myFunc = funcs()
     
 
 print("execute script OK!")
