@@ -1579,12 +1579,12 @@ class funcs():
         # - Rotate elements related to the middle of he object (for little parts floating in Z)-
         objective_object[0].location.x = 0
         if(objective_object[0].location.y < middle_pos and objective_object[0].location.z < foam_z):
-            objective_object[0].location.y = -0.49 #0
+            objective_object[0].location.y = -0.59 #0
             objective_object[0].location.z = 0.49 #0
             objective_object[0].rotation_euler.x = math.radians(-90) #0
             print("giro Izq")
         elif(objective_object[0].location.y > middle_pos and objective_object[0].location.z < foam_z):
-            objective_object[0].location.y = 0.49 #0
+            objective_object[0].location.y = 0.59 #0
             objective_object[0].location.z = 0.49 #0
             objective_object[0].rotation_euler.x = math.radians(90) #0
             print("giro Der")
