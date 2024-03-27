@@ -32,7 +32,8 @@ class funcs():
     foam_block_y = 0.980
     foam_block_z = 1.180
 
-    cut_thickness = 0.02
+    cut_thickness_xy = 0.02
+    cut_thickness_z = 0.002
 
     wood_total_heigh = 0.042 + 8/1000
     wood_total_width = 0.141 + 8/1000
@@ -41,6 +42,9 @@ class funcs():
     volume_total_irregular = 0
     volume_total_cubes = 1
     quantity_cubes = 0
+
+    # list of top objects that will be grouped and will be cut
+    list_top_objects = []
 
     def __init__(self):
         self.select_before = None
@@ -176,7 +180,7 @@ class funcs():
             array_modifier3.relative_offset_displace = (0.0, 0.0, 1.0)  # Desplazamiento relativo
             array_modifier3.use_constant_offset = True  # Usar desplazamiento constante
             #array_modifier3.constant_offset_displace = (0.0, 0.0, separation*scale)  # Desplazamiento constante
-            array_modifier3.constant_offset_displace = (0.0, 0.0, 0.002*scale)  # Desplazamiento constante
+            array_modifier3.constant_offset_displace = (0.0, 0.0, self.cut_thickness_z*scale)  # Desplazamiento constante
             bpy.ops.object.modifier_apply(modifier=array_modifier3.name)
 
         # Aplicar el modificador
@@ -218,7 +222,7 @@ class funcs():
 
         plane_size_high = (dimensions_Z+0.5)
         #division_hight_z = plane_thickness
-        division_hight_z = 0.002
+        division_hight_z = self.cut_thickness_z
 
         faces_count_x = math.ceil(dimensions_X/separation_x)+1 
         faces_count_y = math.ceil(dimensions_Y/separation_y)+1 
@@ -295,15 +299,15 @@ class funcs():
         bpy.ops.object.transform_apply(scale=True)
 
         # Agregar el modificador Array
-        array_modifier_Z1 = cutterPlane_Z.modifiers.new(name="Array_Y", type='ARRAY')
+        array_modifier_Z1 = cutterPlane_Z.modifiers.new(name="Array_Z", type='ARRAY')
         # Agregar el modificador Array
-        array_modifier_Z2 = cutterPlane_Z.modifiers.new(name="Solidify_Y", type='SOLIDIFY')
+        array_modifier_Z2 = cutterPlane_Z.modifiers.new(name="Solidify_Z", type='SOLIDIFY')
 
         # Definir las propiedades del modificador
         array_modifier_Z1.count = faces_count_z  # Número de repeticiones
         array_modifier_Z1.relative_offset_displace = (0.0, 0.0, 1.0)  # Desplazamiento relativo
         array_modifier_Z1.use_constant_offset = True  # Usar desplazamiento constante
-        array_modifier_Z1.constant_offset_displace = (0.0, 0.0, separation_z + division_hight_z/2)  # Desplazamiento constante
+        array_modifier_Z1.constant_offset_displace = (0.0, 0.0, separation_z + division_hight_z)  # Desplazamiento constante
 
         # Definir las propiedades del modificador
         array_modifier_Z2.offset = 0
@@ -431,14 +435,14 @@ class funcs():
         y_value = context.scene.my_number_settings.my_number_property_foam_block_y
         z_value = context.scene.my_number_settings.my_number_property_foam_block_z
 
-        foam_block_hight_x = x_value + self.cut_thickness
-        foam_block_hight_y = y_value + self.cut_thickness
+        foam_block_hight_x = x_value + self.cut_thickness_xy
+        foam_block_hight_y = y_value + self.cut_thickness_xy
         foam_block_hight_z = z_value        
 
         print(f"from context foam_block_hight_x:{foam_block_hight_x} foam_block_hight_y:{foam_block_hight_y} foam_block_hight_z:{foam_block_hight_z}")
         print(f"from self foam_block_hight_x:{self.foam_block_x} foam_block_hight_y:{self.foam_block_y} foam_block_hight_z:{self.foam_block_z}")
 
-        separation = self.cut_thickness
+        separation = self.cut_thickness_xy
         # get object
         selected_object = bpy.context.active_object
         # get object dimensions
@@ -468,7 +472,7 @@ class funcs():
         foam_size_Y = context.scene.my_number_settings.my_number_property_foam_block_y
         foam_size_Z = context.scene.my_number_settings.my_number_property_foam_block_z
 
-        separation = self.cut_thickness
+        separation = self.cut_thickness_xy
 
         selected_object = bpy.context.active_object
         # get object dimensions
@@ -545,17 +549,40 @@ class funcs():
         #fix location in z to pass the inner verification, if z location is 0 may have conflict to check if is inside the cube due the cube Z location is 0
         if bpy.context.active_object.location.z == 0: bpy.context.active_object.location.z=+0.0001
 
+        foam_size_Z = context.scene.my_number_settings.my_number_property_foam_block_z
+        selected_object = bpy.context.active_object
+        # get new origin coordinates
+        dimensions_Z = selected_object.dimensions.z 
+        n_blocks_z = math.ceil((dimensions_Z+self.cut_thickness_xy)/foam_size_Z)
+        self.list_top_objects = []
+
         self.cut_object(context)
         # Get a list of all cube objects and irregular objects in the scene
         objects_cube      = [object for object in bpy.data.objects if object.name.startswith(f"{cubes_name}.")]
-        objects_irregular = [object for object in bpy.data.objects if object.name.startswith(f"{object_selected_name}.")]
-        
+        #objects_irregular = [object for object in bpy.data.objects if object.name.startswith(f"{object_selected_name}.")]
+
+        objects_irregular = []
+        for object in bpy.data.objects:
+            object['Top'] = False
+            if object.name.startswith(f"{object_selected_name}."):
+                objects_irregular.append(object)
+            
+
         # Dictionary to store the relationship between cube objects and irregular objects
         relation_cube_irregular = {}
 
         
         vol_cubo_obj = abs(context.scene.my_number_settings.my_number_property_foam_block_x*context.scene.my_number_settings.my_number_property_foam_block_y*context.scene.my_number_settings.my_number_property_foam_block_z)
-            
+
+        extra_x = self.cut_thickness_xy
+        extra_y = self.cut_thickness_xy
+        extra_z = self.cut_thickness_z
+
+        '''extra_x = 0
+        extra_y = 0
+        extra_z = 0'''
+
+
         for object_cube in objects_cube:
             # # Get the world coordinates bounding-box-points of object_cube
             bbox_cube = [['%.4f' % elem for elem in object_cube.matrix_world @ Vector(coor)] for coor in object_cube.bound_box]
@@ -566,11 +593,22 @@ class funcs():
                 bbox_irregular = [ ['%.4f' % elem for elem in object_irregular.matrix_world @ Vector(coor)] for coor in object_irregular.bound_box]
 
                 # # Check if the bounding box of the irregular object is contained within the bounding box of the cube object
-                is_inside = all(
+                is_inside = all((
+                    float(bbox_cube[0][0])-extra_x <= float(bbox_irregular[0][0]) <= float(bbox_cube[6][0])+extra_x and
+                    float(bbox_cube[0][0])-extra_x <= float(bbox_irregular[6][0]) <= float(bbox_cube[6][0])+extra_x ,
+
+                    float(bbox_cube[0][1])-extra_y <= float(bbox_irregular[0][1]) <= float(bbox_cube[6][1])+extra_y and
+                    float(bbox_cube[0][1])-extra_y <= float(bbox_irregular[6][1]) <= float(bbox_cube[6][1])+extra_y ,
+
+                    float(bbox_cube[0][2])-extra_z <= float(bbox_irregular[0][2]) <= float(bbox_cube[6][2])+extra_z and
+                    float(bbox_cube[0][2])-extra_z <= float(bbox_irregular[6][2]) <= float(bbox_cube[6][2])+extra_z)
+                )
+                
+                '''is_inside = all(
                     float(bbox_cube[0][i]) <= float(bbox_irregular[0][i]) <= float(bbox_cube[6][i]) and
                     float(bbox_cube[0][i]) <= float(bbox_irregular[6][i]) <= float(bbox_cube[6][i])
                     for i in range(3)
-                )                    
+                )'''                
                                 
                 if is_inside:
                     relation_cube_irregular[object_irregular.name] = object_cube.name
@@ -578,12 +616,13 @@ class funcs():
                     #print(f'===={object_irregular.name} - {object_cube.name}=====')
                     #for i in range (3):                        
                         #print(f'c0|{i}:{bbox_cube[0][i]} <= i{i}|{i}:{bbox_irregular[i][i]} <= c6|{i}:{bbox_cube[6][i]}//c0|{i}:{bbox_cube[0][i]} <= i7|{i}:{bbox_irregular[7][i]} <= c6|{i}:{bbox_cube[6][i]}')
-                '''if object_irregular.name == 'irregObjPart.068': #and object_cube.name == 'foamBlock.113':
+                '''if object_irregular.name == 'irregObjPart.047': #and object_cube.name == 'foamBlock.113':
                     print(f'-----------------====[{have_something_inside}]--{object_irregular.name} -in- {object_cube.name}=====')
                     for i in range (3):                     
                         print(f'[{float(bbox_cube[0][i]) <= float(bbox_irregular[0][i]) <= float(bbox_cube[6][i])}] and [{float(bbox_cube[0][i]) <= float(bbox_irregular[6][i]) <= float(bbox_cube[6][i])}] - c0  |{i}:{bbox_cube[0][i]} <= i0|{i}:{bbox_irregular[0][i]} <= c6|{i}:{bbox_cube[6][i]}//c0|{i}:{bbox_cube[0][i]} <= i6|{i}:{bbox_irregular[6][i]} <= c6|{i}:{bbox_cube[6][i]}')
                     
-                    break'''
+                    break'''                            
+
             #Delete cube if don't have nothing inside            
             if have_something_inside == 0:
                 bpy.data.objects.remove(object_cube, do_unlink=True)
@@ -662,11 +701,18 @@ class funcs():
             if object_irregular_obj.location.z < context.scene.my_number_settings.my_number_property_foam_block_z :
                 self.cut_wood(context, object_irregular_obj,'x')
                 self.cut_wood(context, object_irregular_obj,'y')
+            #are top objects? set it as top
+            if (n_blocks_z-1) * foam_size_Z <= object_irregular_obj.location.z:
+                self.list_top_objects.append(object_irregular_obj.name)
+                bpy.data.objects[object_irregular]['Top'] = True
+
+                #print(f"Elemento Top {n_blocks_z}-- bloquesZ {(n_blocks_z-1) * foam_size_Z} objZ--> {object_irregular_obj.location.z} obj--> {object_irregular_obj}")
             #----create STL file of irregular object
             collection_name = object_irregular_obj.users_collection[0].name
             self.export_to_stl_origin(context,collection_name,collection_name,"irregObjPart.")
         print(f'---------Volumen Total del irregular = {volumen_total_irregular_obj}')
         print(f'---------Volumen Total del cubes = {volumen_total_cube_obj}')
+        print(f"-----------------------Cantidad de objetos top {len(self.list_top_objects)}")
         #vol_used = volumen_total_irregular_obj / volumen_total_cube_obj * 100
         #print(f'---------Volumen Used = {round(vol_used,2)}%')
 
