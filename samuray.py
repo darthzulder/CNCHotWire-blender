@@ -712,7 +712,8 @@ class funcs():
             self.export_to_stl_origin(context,collection_name,collection_name,"irregObjPart.")
         print(f'---------Volumen Total del irregular = {volumen_total_irregular_obj}')
         print(f'---------Volumen Total del cubes = {volumen_total_cube_obj}')
-        print(f"-----------------------Cantidad de objetos top {len(self.list_top_objects)}")
+        bpy.context.scene["my_top_object_list"] = self.list_top_objects
+        print(f"-----------------------Cantidad de objetos top {len(bpy.context.scene['my_top_object_list'])}")
         #vol_used = volumen_total_irregular_obj / volumen_total_cube_obj * 100
         #print(f'---------Volumen Used = {round(vol_used,2)}%')
 
@@ -1820,6 +1821,72 @@ class funcs():
         print(area)
         return area, volume
 
+    def block_base_top_part(self, context):
+
+        if 'top_object_block' not in context.scene:
+            context.scene['top_object_block'] = context.active_object
+        elif context.scene['top_object_block'] == context.active_object:
+            del context.scene['top_object_block']
+        elif context.scene['top_object_block'] != context.active_object:            
+            context.active_object.location = context.scene['save_location']
+            context.active_object.users_collection[0].hide_viewport = True
+            bpy.context.view_layer.objects.active = context.scene['top_object_block']
+            del context.scene['top_object_block']
+
+        self.isolate_part_collection(context)
+
+    def isolate_part_collection(self, context):
+
+        # Get the active object
+        active_obj = context.active_object
+
+        # Get all collections in the scene
+        all_collections = context.scene.collection.children        
+
+        # Hide all collections except the target collections
+        for collection in all_collections:
+            if collection.name != active_obj.users_collection[0].name:
+                collection.hide_viewport = not collection.hide_viewport
+
+        #print(f"Coleccion actual {active_obj.users_collection[0].name} estado {context.scene['top_object_block'].name}")
+
+    def change_select_top_part(self, context,direction = 1):
+        top_object_list = context.scene['my_top_object_list']
+        if context.active_object.select_get() == True:
+            obj_active_name = context.active_object.name
+            index = top_object_list.index(obj_active_name)
+            
+            if obj_active_name in bpy.data.objects:  # Check if the object is in the scene
+                if len(top_object_list) > 0:  # Check if the top_object_list is not empty
+                    # Calculate the next index using modulo to handle wrapping around the list, when index is the last -1 in the list it will be 0
+                    index_next = (index + direction) % len(top_object_list)
+                    obj_next = bpy.data.objects[top_object_list[index_next]]  # Get the next object from the list
+                else:  # If top_object_list is empty
+                    index_next = 0
+                    obj_next = bpy.data.objects[top_object_list[index_next]]  # Get the first object from the list
+
+                obj_next.users_collection[0].hide_viewport = False #let selected blocked object be visible                
+                
+                if context.scene['top_object_block'].name != obj_active_name:
+                    context.active_object.location = context.scene['save_location']
+                context.scene['save_location'] = obj_next.location
+                obj_next.location = context.scene['top_object_block'].location
+                if context.scene['top_object_block'].name != obj_active_name:
+                    context.active_object.users_collection[0].hide_viewport = True
+
+                bpy.ops.object.select_all(action='DESELECT')  # Deselect all objects
+                
+                obj_next.select_set(True)  # Select the next object
+                bpy.context.view_layer.objects.active = obj_next  # Set the next object as the active object
+
+            print(f"El índice de '{obj_active_name}' en la lista es: {index}")
+            print(f"-----------------------Total objetos top {len(bpy.context.scene['my_top_object_list'])}")
+
+    def rotate_top_part(self, context, axis, angle):
+        
+        context.active_object.rotation_euler[axis] = math.radians(angle)
+        print(f"-----------------------Rotar objetos top {context.active_object.rotation_euler[axis]}")
+
 #myFunc = funcs()
 
 # BUTTON CUSTOM (OPERATOR)
@@ -1837,7 +1904,7 @@ class INPUT_TEXT_01(bpy.types.PropertyGroup):
         name="Z", default="", description="Introduce un valor para Z")
     
     my_text_property_area: bpy.props.StringProperty(
-        name="Z", default="", description="Introduce Area en metros cuadrados")
+        name="Area", default="", description="Introduce Area en metros cuadrados")
     
 class INPUT_NUMBER_01(bpy.types.PropertyGroup):
 
@@ -2048,7 +2115,7 @@ class BUTTOM_CUSTOM06(bpy.types.Operator):
     def execute(self, context):
         
         funcion = funcs()
-        funcion.create_block_apart()
+        funcion.block_base_top_part(context)
 
         print("execute button06 custom ok!")
 
@@ -2063,9 +2130,8 @@ class BUTTOM_CUSTOM07(bpy.types.Operator):
 
     def execute(self, context):
         
-        BUTTOM_CUSTOM07.funcion = funcs()
-        BUTTOM_CUSTOM07.funcion.draw_init()
-
+        funcion = funcs()
+        funcion.change_select_top_part(context,-1)
         print("execute button07 custom ok!")
 
         return {'FINISHED'} 
@@ -2080,13 +2146,69 @@ class BUTTOM_CUSTOM08(bpy.types.Operator):
 
     def execute(self, context):
         
-       #self.funcion = funcs()
-        BUTTOM_CUSTOM07.funcion.gpencil_to_mesh()
+        funcion = funcs()
+        funcion.change_select_top_part(context,1)
 
         print("execute button08 custom ok!")
 
         return {'FINISHED'}     
-     
+
+class BUTTOM_CUSTOM09(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM09_CutFoam"
+    bl_idname = "object.button_custom09"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        
+        funcion = funcs()
+        funcion.rotate_top_part(context,0,180)
+
+        print("execute button09 custom ok!")
+
+        return {'FINISHED'} 
+
+class BUTTOM_CUSTOM10(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM10_CutFoam"
+    bl_idname = "object.button_custom10"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        
+        funcion = funcs()
+        funcion.rotate_top_part(context,0,0)
+
+        print("execute button10 custom ok!")
+
+        return {'FINISHED'} 
+
+class BUTTOM_CUSTOM11(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM11_CutFoam"
+    bl_idname = "object.button_custom11"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        
+        funcion = funcs()
+        funcion.rotate_top_part(context,2,180)
+
+        print("execute button11 custom ok!")
+
+        return {'FINISHED'}      
+
+class BUTTOM_CUSTOM12(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM12_CutFoam"
+    bl_idname = "object.button_custom12"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        
+        funcion = funcs()
+        funcion.rotate_top_part(context,2,0)
+
+        print("execute button12 custom ok!")
+
+        return {'FINISHED'}      
+
 # PANEL UI (PART 1 DRAW)
 ####################################################
 
@@ -2268,41 +2390,69 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
         #variables
         layout = self.layout
 
-        #create simple row
-        row01 = layout.row()
-        row01.label(text = "First Step")
+        if context.active_object['Top'] == False:
 
-        # add button custom
-        row01 = layout.row()
-        row01.scale_y = 2
-        row01.operator("object.button_custom06", text= "Prepare Block for small parts", icon = "GRID")
+            #create simple row
+            row01 = layout.row()
+            row01.label(text = "Select an object in the Top layer")
 
-        #create simple row
-        row02 = layout.row()
-        row02.label(text = "Second Step")
+        elif context.active_object['Top'] == True:
 
-        # add button custom
-        row02 = layout.row()
-        row02.scale_y = 2
-        row02.operator("object.button_custom06", text= "Prepare Cuts in CNC Hot Wire", icon = "IMGDISPLAY")
+            #create simple row
+            row01 = layout.row()
+            row01.label(text = f"Object : {context.active_object.name}")
 
-        #create simple row
-        row02 = layout.row()
-        row02.label(text = "Thirth Step")
+            # add button custom
+            row01 = layout.row()
+            row01.scale_y = 2
+            row01.operator("object.button_custom06", text= "Block TOP Object", icon = "UNLOCKED")
 
-        # add button custom
-        row02 = layout.row()
-        row02.scale_y = 2
-        row02.operator("object.button_custom07", text= "Test01", icon = "IMGDISPLAY")
+            #create simple row
+            row02 = layout.row()
+            row02.label(text = f"Positioning Part: {context.active_object.name}")       
 
-        #create simple row
-        row02 = layout.row()
-        row02.label(text = "Fourth Step")
+            # add button custom
+            row02 = layout.row()
+            row02.scale_y = 2
+            row02.operator("object.button_custom07", text= "Before Part", icon = "BACK")
 
-        # add button custom
-        row02 = layout.row()
-        row02.scale_y = 2
-        row02.operator("object.button_custom08", text= "Test02", icon = "IMGDISPLAY")
+            # add button custom 
+            row02.scale_y = 2
+            row02.operator("object.button_custom08", text= "Next Part", icon = "FORWARD")
+
+            #create simple row
+            row02 = layout.row()
+            row02.label(text = f"Rotation Z: {context.active_object.location.z}")
+
+            # add button custom
+            row02 = layout.row()
+            row02.scale_y = 2
+            row02.operator("object.button_custom09", text= "R-X 180", icon = "LOOP_FORWARDS")
+
+            row02.scale_y = 2
+            row02.operator("object.button_custom10", text= "R-X 0", icon = "LOOP_BACK")
+
+            # add button custom
+            row02 = layout.row()
+            row02.scale_y = 2
+            row02.operator("object.button_custom11", text= "R-Z 180", icon = "LOOP_FORWARDS")
+
+            row02.scale_y = 2
+            row02.operator("object.button_custom12", text= "R-Z 0", icon = "LOOP_BACK")
+
+            # add button custom
+            row02 = layout.row()
+            row02.scale_y = 2
+            row02.prop(context.active_object, "location", text="Z Position", index=2)
+
+            #create simple row
+            row02 = layout.row()
+            row02.label(text = "Fourth Step")
+
+            # add button custom
+            row02 = layout.column()
+            row02.scale_y = 2
+            row02.prop(context.active_object, "location", text="Z Position", index=2)
 
 # REGISTER (PART 2)
 ####################################################
@@ -2327,6 +2477,10 @@ def register():
     bpy.utils.register_class(BUTTOM_CUSTOM06)
     bpy.utils.register_class(BUTTOM_CUSTOM07)
     bpy.utils.register_class(BUTTOM_CUSTOM08)
+    bpy.utils.register_class(BUTTOM_CUSTOM09)
+    bpy.utils.register_class(BUTTOM_CUSTOM10)
+    bpy.utils.register_class(BUTTOM_CUSTOM11)
+    bpy.utils.register_class(BUTTOM_CUSTOM12)
 
 def unregister():
     bpy.utils.unregister_class(PANEL_CUSTOM_UI_00)
