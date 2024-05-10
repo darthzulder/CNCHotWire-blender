@@ -1829,6 +1829,7 @@ class funcs():
             del context.scene['top_object_block']
         elif context.scene['top_object_block'] != context.active_object:            
             context.active_object.location = context.scene['save_location']
+            context.active_object.rotation_euler = [0, 0, 0]            
             context.active_object.users_collection[0].hide_viewport = True
             bpy.context.view_layer.objects.active = context.scene['top_object_block']
             del context.scene['top_object_block']
@@ -1869,11 +1870,18 @@ class funcs():
                        
                 if context.scene['top_object_block'].name != obj_active_name:
                     context.active_object.location = context.scene['save_location']
+                    context.active_object.rotation_euler = [0, 0, 0]
                 context.scene['save_location'] = obj_next.location
                 obj_next.location = context.scene['top_object_block'].location
 
                 if context.scene['top_object_block'].name != obj_active_name: #hide selected/active object collection if it is not top_object_block
                     context.active_object.users_collection[0].hide_viewport = True
+                '''    for object in context.active_object.users_collection[0].objects:
+                        if not object.name.startswith('irreg_'):
+                            object.hide_viewport = not object.hide_viewport
+
+                for obj in context.active_object.users_collection[0].objects:
+                    obj.hide_viewport = not obj.hide_viewport'''
 
                 bpy.ops.object.select_all(action='DESELECT')  # Deselect all objects
                 
@@ -1888,7 +1896,52 @@ class funcs():
         context.active_object.rotation_euler[axis] = math.radians(angle)
         print(f"-----------------------Rotar objetos top {context.active_object.rotation_euler[axis]}")
 
-#myFunc = funcs()
+    def group_top_part(self, context):
+
+        # Obtén la referencia al objeto activo
+        objeto_activo = bpy.context.active_object
+
+        # Obtén la referencia a la colección del objeto activo
+        actual_collection = objeto_activo.users_collection[0]
+
+        # Itera sobre los objetos en la colección
+        for objeto in actual_collection.objects:
+            if objeto.name.startswith('areaCNC.'):
+                # Imprime el nombre del objeto
+                print(objeto.name)
+
+                area_copia = objeto.copy()
+                actual_collection.objects.link(area_copia)
+
+                # Obtén la referencia al objeto mesh del objeto cubo
+                mesh = objeto.data
+
+                coords_clean_area = []
+
+                # Itera sobre los vértices del mesh
+                for vert in mesh.vertices:
+                    # Almacena las coordenadas del vértice
+                    coords_clean_area.append(vert.co)
+                    print(coords_clean_area)
+                break
+        # Crea un nuevo plano
+        bpy.ops.mesh.primitive_plane_add(size=2.6, enter_editmode=False, location=objeto_activo.location)
+
+        # Obtén el plano recién creado
+        cuter_plane = bpy.context.active_object
+        cuter_plane.name = "cutterPlane.001"
+        #cuter_plane.select_set(True)
+
+        # Cambia la colección del plano al mismo que el objeto activo
+        actual_collection.objects.link(cuter_plane)
+        #myFunc = funcs()
+
+        #bpy.context.view_layer.objects.active = objeto_copia
+
+        boolean_modifier_X = area_copia.modifiers.new(name="Cut_plane_X", type='BOOLEAN')
+        boolean_modifier_X.solver = 'FAST'
+        boolean_modifier_X.object = bpy.data.objects['cutterPlane.001']
+        
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
@@ -2208,7 +2261,21 @@ class BUTTOM_CUSTOM12(bpy.types.Operator):
 
         print("execute button12 custom ok!")
 
-        return {'FINISHED'}      
+        return {'FINISHED'}   
+
+class BUTTOM_CUSTOM13(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM13_CutFoam"
+    bl_idname = "object.button_custom13"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        
+        funcion = funcs()
+        funcion.group_top_part(context)
+
+        print("execute button13 custom ok!")
+
+        return {'FINISHED'}  
 
 # PANEL UI (PART 1 DRAW)
 ####################################################
@@ -2390,70 +2457,78 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
     def draw(self, context):
         #variables
         layout = self.layout
+        if 'Top' in bpy.context.active_object and context.active_object.select_get():
+            if context.active_object['Top'] == False:
 
-        if context.active_object['Top'] == False:
+                #create simple row
+                row01 = layout.row()
+                row01.label(text = "Select an object in the Top layer")
 
-            #create simple row
-            row01 = layout.row()
-            row01.label(text = "Select an object in the Top layer")
+            elif context.active_object['Top'] == True:
 
-        elif context.active_object['Top'] == True:
+                #create simple row
+                row01 = layout.row()
+                row01.label(text = f"Object : {context.active_object.name}")
 
-            #create simple row
-            row01 = layout.row()
-            row01.label(text = f"Object : {context.active_object.name}")
+                # add button custom
+                row01 = layout.row()
+                row01.scale_y = 2
+                row01.operator("object.button_custom06", text= "Block TOP Object", icon = "UNLOCKED")
 
-            # add button custom
-            row01 = layout.row()
-            row01.scale_y = 2
-            row01.operator("object.button_custom06", text= "Block TOP Object", icon = "UNLOCKED")
+                #create simple row
+                row02 = layout.row()
+                row02.label(text = f"Positioning Part: {context.active_object.name}")       
 
-            #create simple row
-            row02 = layout.row()
-            row02.label(text = f"Positioning Part: {context.active_object.name}")       
+                if "top_object_block" in context.scene:
+                    # add button custom
+                    row02 = layout.row()
+                    row02.scale_y = 2
+                    row02.operator("object.button_custom07", text= "Before Part", icon = "BACK")
 
-            # add button custom
-            row02 = layout.row()
-            row02.scale_y = 2
-            row02.operator("object.button_custom07", text= "Before Part", icon = "BACK")
+                    # add button custom 
+                    row02.scale_y = 2
+                    row02.operator("object.button_custom08", text= "Next Part", icon = "FORWARD")
+                
+                    if context.scene['top_object_block'].name != context.active_object.name:
 
-            # add button custom 
-            row02.scale_y = 2
-            row02.operator("object.button_custom08", text= "Next Part", icon = "FORWARD")
+                        #create simple row
+                        row02 = layout.row()
+                        row02.label(text = f"Rotation Z: {context.active_object.location.z}")
 
-            #create simple row
-            row02 = layout.row()
-            row02.label(text = f"Rotation Z: {context.active_object.location.z}")
+                        # add button custom
+                        row02 = layout.row()
+                        row02.scale_y = 2
+                        row02.operator("object.button_custom09", text= "R-X 180", icon = "LOOP_FORWARDS")
 
-            # add button custom
-            row02 = layout.row()
-            row02.scale_y = 2
-            row02.operator("object.button_custom09", text= "R-X 180", icon = "LOOP_FORWARDS")
+                        row02.scale_y = 2
+                        row02.operator("object.button_custom10", text= "R-X 0", icon = "LOOP_BACK")
 
-            row02.scale_y = 2
-            row02.operator("object.button_custom10", text= "R-X 0", icon = "LOOP_BACK")
+                        # add button custom
+                        row02 = layout.row()
+                        row02.scale_y = 2
+                        row02.operator("object.button_custom11", text= "R-Z 180", icon = "LOOP_FORWARDS")
 
-            # add button custom
-            row02 = layout.row()
-            row02.scale_y = 2
-            row02.operator("object.button_custom11", text= "R-Z 180", icon = "LOOP_FORWARDS")
+                        row02.scale_y = 2
+                        row02.operator("object.button_custom12", text= "R-Z 0", icon = "LOOP_BACK")
 
-            row02.scale_y = 2
-            row02.operator("object.button_custom12", text= "R-Z 0", icon = "LOOP_BACK")
+                        # add button custom
+                        row02 = layout.row()
+                        row02.scale_y = 2
+                        row02.prop(context.active_object, "location", text="Z Position", index=2)
+            #else:
+                        #create simple row
+                        row02 = layout.row()
+                        row02.label(text = "Fourth Step")
+                    
+                        # add button custom
+                        row02 = layout.row()
+                        row02.scale_y = 2
+                        row02.operator("object.button_custom13", text= "Group and cut")
 
-            # add button custom
-            row02 = layout.row()
-            row02.scale_y = 2
-            row02.prop(context.active_object, "location", text="Z Position", index=2)
-
-            #create simple row
-            row02 = layout.row()
-            row02.label(text = "Fourth Step")
-
-            # add button custom
-            row02 = layout.column()
-            row02.scale_y = 2
-            row02.prop(context.active_object, "location", text="Z Position", index=2)
+            else:
+                        #create simple row
+                        row02 = layout.row()
+                        row02.label(text = "Select a Top Part First")
 
 # REGISTER (PART 2)
 ####################################################
@@ -2482,6 +2557,7 @@ def register():
     bpy.utils.register_class(BUTTOM_CUSTOM10)
     bpy.utils.register_class(BUTTOM_CUSTOM11)
     bpy.utils.register_class(BUTTOM_CUSTOM12)
+    bpy.utils.register_class(BUTTOM_CUSTOM13)
 
 def unregister():
     bpy.utils.unregister_class(PANEL_CUSTOM_UI_00)
@@ -2504,6 +2580,11 @@ def unregister():
     bpy.utils.unregister_class(BUTTOM_CUSTOM06)
     bpy.utils.unregister_class(BUTTOM_CUSTOM07)
     bpy.utils.unregister_class(BUTTOM_CUSTOM08)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM09)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM10)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM11)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM12)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM13)
 
 if __name__ == "__main__":
     register()
