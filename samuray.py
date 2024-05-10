@@ -1865,13 +1865,14 @@ class funcs():
                     index_next = 0
                     obj_next = bpy.data.objects[top_object_list[index_next]]  # Get the first object from the list
 
-                obj_next.users_collection[0].hide_viewport = False #let selected blocked object be visible                
-                
+                obj_next.users_collection[0].hide_viewport = False #let selected blocked object be visible  
+                       
                 if context.scene['top_object_block'].name != obj_active_name:
                     context.active_object.location = context.scene['save_location']
                 context.scene['save_location'] = obj_next.location
                 obj_next.location = context.scene['top_object_block'].location
-                if context.scene['top_object_block'].name != obj_active_name:
+
+                if context.scene['top_object_block'].name != obj_active_name: #hide selected/active object collection if it is not top_object_block
                     context.active_object.users_collection[0].hide_viewport = True
 
                 bpy.ops.object.select_all(action='DESELECT')  # Deselect all objects
