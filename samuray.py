@@ -1027,6 +1027,39 @@ class funcs():
             f.write(f'G01X0Y1200A{rotation_z_degrees}\n')
         f.write(f'(Zigzag)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
 
+    def write_to_file_by_arms(self,verts,collection_name,update=False):
+        
+        scale=1000
+        i=0
+        pathFileName=".\\PARTES\\"+collection_name+"\\"+collection_name+"."
+            
+        pathFileNumber=pathFileName+'%03d' % i +"_TOP_samurai.nc"
+        #create .nc file 
+        try:
+            os.makedirs(".\\PARTES\\"+collection_name, exist_ok=True)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
+        while os.path.exists(pathFileNumber):
+            i=i+1
+            pathFileNumber=pathFileName+'%03d' % i +"_TOP_samurai.nc"
+        if update == True:
+            #if not wood:
+            i=i-1
+            pathFileNumber=pathFileName+'%03d' % i +"_TOP_samurai.nc"
+
+        f = open(pathFileNumber,"w+")
+        f.write(f'(GCODE_from_Blender)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
+        
+        #direction will be from +X  to -X
+        x_first = verts[0]['X']
+        
+        f.write(f"G01X{verts[0]['X']}Y{verts[0]['Y']}U{verts[0]['U']}V{verts[0]['V']}\n") 
+        f.write(f"G01X{verts[1]['X']}Y{verts[1]['Y']}U{verts[1]['U']}V{verts[1]['V']}\n")
+        f.write(f'G01X2150Y1200U2150V1200\n') 
+        f.write(f'G01X0Y1200U0V1200\n')
+        f.write(f'(To Origin)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000U0.0000V0.0000\nG01X0.0000Y0.0000U0.0000V0.0000\nF600\n')
+    
     def reorder_vertices(self, iniver):
         #must be in EDIT mode
         me = bpy.context.object.data
@@ -1856,6 +1889,7 @@ class funcs():
         if context.active_object.select_get() == True:
             obj_active_name = context.active_object.name
             index = top_object_list.index(obj_active_name)
+            coll_active_name = context.scene['top_object_block'].users_collection[0].name
             
             if obj_active_name in bpy.data.objects:  # Check if the object is in the scene
                 if len(top_object_list) > 0:  # Check if the top_object_list is not empty
@@ -1866,7 +1900,13 @@ class funcs():
                     index_next = 0
                     obj_next = bpy.data.objects[top_object_list[index_next]]  # Get the first object from the list
 
-                obj_next.users_collection[0].hide_viewport = False #let selected blocked object be visible  
+                obj_next.users_collection[0].hide_viewport = False #let selected blocked object be visible
+                for object in obj_next.users_collection[0].objects:
+                        if object.name.startswith('areaCNC.') and object.users_collection[0].name != coll_active_name:
+                            #object.hide_viewport = not object.hide_viewport
+                            object.hide_viewport = True
+                            #print(f'------------> OCULTAR {object.name} = {object.hide_viewport}  coll_actual={object.users_collection[0].name} Coll_act={coll_active_name}')
+                            break  
                        
                 if context.scene['top_object_block'].name != obj_active_name:
                     context.active_object.location = context.scene['save_location']
@@ -1874,13 +1914,17 @@ class funcs():
                 context.scene['save_location'] = obj_next.location
                 obj_next.location = context.scene['top_object_block'].location
 
-                if context.scene['top_object_block'].name != obj_active_name: #hide selected/active object collection if it is not top_object_block
+                if context.scene['top_object_block'].name != obj_active_name: #hide selected/active object collection if it is not top_object_block                                        
+                    
+                    for object in context.active_object.users_collection[0].objects:
+                        if object.name.startswith('areaCNC.'):
+                            #object.hide_viewport = not object.hide_viewport
+                            object.hide_viewport = False
+                            #print(f'------------> MOSTRAR {object.name} = {object.hide_viewport}')
+                            break
+                    
                     context.active_object.users_collection[0].hide_viewport = True
-                '''    for object in context.active_object.users_collection[0].objects:
-                        if not object.name.startswith('irreg_'):
-                            object.hide_viewport = not object.hide_viewport
-
-                for obj in context.active_object.users_collection[0].objects:
+                '''for obj in context.active_object.users_collection[0].objects:
                     obj.hide_viewport = not obj.hide_viewport'''
 
                 bpy.ops.object.select_all(action='DESELECT')  # Deselect all objects
@@ -1897,40 +1941,45 @@ class funcs():
         print(f"-----------------------Rotar objetos top {context.active_object.rotation_euler[axis]}")
 
     def group_top_part(self, context):
-
+        
         # Obtén la referencia al objeto activo
-        objeto_activo = bpy.context.active_object
-
+        objeto_activo = context.active_object
+        # add base block
+        objeto_activo['group'] = context.scene['top_object_block'].name
+        # add order
+        if 'order_group' not in objeto_activo:
+            objeto_activo['order_group'] = 0
+        else:
+            objeto_activo['order_group'] += 1
+        
         # Obtén la referencia a la colección del objeto activo
         actual_collection = objeto_activo.users_collection[0]
 
         # Itera sobre los objetos en la colección
         for objeto in actual_collection.objects:
             if objeto.name.startswith('areaCNC.'):
-                # Imprime el nombre del objeto
+                # Print object name
                 print(objeto.name)
 
-                area_copia = objeto.copy()
-                actual_collection.objects.link(area_copia)
+                area_copy = objeto.copy()
+                area_copy.data = objeto.data.copy()
+                #show hidden block
+                area_copy.hide_viewport = False
+                actual_collection.objects.link(area_copy)
+                area_copy.location = context.scene['top_object_block'].location
+                #base block flag
+                area_copy['cutter']='block'
 
-                # Obtén la referencia al objeto mesh del objeto cubo
-                mesh = objeto.data
-
-                coords_clean_area = []
-
-                # Itera sobre los vértices del mesh
-                for vert in mesh.vertices:
-                    # Almacena las coordenadas del vértice
-                    coords_clean_area.append(vert.co)
-                    print(coords_clean_area)
-                break
         # Crea un nuevo plano
         bpy.ops.mesh.primitive_plane_add(size=2.6, enter_editmode=False, location=objeto_activo.location)
 
         # Obtén el plano recién creado
         cuter_plane = bpy.context.active_object
         cuter_plane.name = "cutterPlane.001"
-        #cuter_plane.select_set(True)
+        cuter_plane['cutter']='plane'
+
+        cuter_plane.lock_location = (True, True, False)
+        cuter_plane.lock_scale = (True, True, True)
 
         # Cambia la colección del plano al mismo que el objeto activo
         actual_collection.objects.link(cuter_plane)
@@ -1938,10 +1987,118 @@ class funcs():
 
         #bpy.context.view_layer.objects.active = objeto_copia
 
-        boolean_modifier_X = area_copia.modifiers.new(name="Cut_plane_X", type='BOOLEAN')
-        boolean_modifier_X.solver = 'FAST'
-        boolean_modifier_X.object = bpy.data.objects['cutterPlane.001']
+    def change_origin_front_left_bottom(self, context, object):
         
+        obj_block = object
+        #change origin to vertex to left down the block
+
+        # Get the vertices of the object
+        verts = obj_block.data.vertices
+
+        # Get the vertex with the highest value in the X axis
+        max_x = max(vert.co.x for vert in verts)
+        vertice_max_x = next(vert for vert in verts if vert.co.x == max_x)
+
+        # Get the vertex with the lowest value in the Y axis
+        min_y = min(vert.co.y for vert in verts)
+        vertice_min_y = next(vert for vert in verts if vert.co.y == min_y)
+
+        # Get the vertex with the lowest value in the Z axis
+        min_z = min(vert.co.z for vert in verts)
+        vertice_min_z = next(vert for vert in verts if vert.co.z == min_z)
+
+        # Calcular el nuevo origen del cubo
+        new_origin = (obj_block.matrix_world @ Vector((vertice_max_x.co.x, vertice_min_y.co.y, vertice_min_z.co.z)))
+
+        # change cursor location
+        bpy.context.scene.cursor.location = new_origin
+        # set the origin on the current object to the 3dcursor location
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+        
+    def cut_and_group_parts(self, context):
+        cutter_obj = context.active_object
+        actual_collection = cutter_obj.users_collection[0]
+        
+        for objeto in actual_collection.objects:
+            if 'cutter' in objeto:
+                if objeto['cutter']=='block':
+                    obj_block=objeto                  
+
+                    # Obtén la referencia al objeto mesh del objeto cubo
+                    mesh = obj_block.data
+
+                    coords_clean_area = []
+                    coords_plane_area = []
+
+                    # Itera sobre los vértices del mesh
+                    for vert in mesh.vertices:
+                        # Almacena las coordenadas del vértice
+                        coords_clean_area.append(obj_block.matrix_world @ vert.co)
+                    print(coords_clean_area)
+
+                    print(f"Block = {objeto['cutter']}")
+
+                    boolean_modifier_block = obj_block.modifiers.new(name="temporal_cut_001", type='BOOLEAN')
+                    boolean_modifier_block.solver = 'FAST'
+                    boolean_modifier_block.object = bpy.data.objects['cutterPlane.001']
+                    bpy.context.view_layer.objects.active = obj_block    
+                    bpy.ops.object.select_all(action='DESELECT')  # Deselect all objects                
+                    obj_block.hide_select = False
+                    obj_block.select_set(True)
+
+                    self.change_origin_front_left_bottom(context, obj_block)                    
+
+                    bpy.ops.object.modifier_apply(modifier=boolean_modifier_block.name)
+                    
+                    obj_block_cut = objeto
+                    mesh = obj_block_cut.data
+                    coords_block_cut = [obj_block_cut.matrix_world @ vert.co for vert in mesh.vertices]
+                    print(coords_block_cut)
+                    print(f"Block-Cut = {objeto['cutter']}")
+                     
+                    #Set coordinates to compare the block before and after cut
+                    A = set(tuple((round(coor.x,4),round(coor.y,4),round(coor.z,4))) for coor in coords_clean_area)
+                    B = set(tuple((round(coor.x,4),round(coor.y,4),round(coor.z,4))) for coor in coords_block_cut)
+                    coords_to_cut = (B-A)
+                    
+                    #change coords_to_cut to local coords
+                    coords_to_cut_local = tuple((round(coord[0], 4)*-1000,round(coord[1], 4)*1000,round(coord[2], 4)*1000) for coord in [obj_block.matrix_world.inverted() @ Vector((vert)) for vert in coords_to_cut])
+
+                    print(f"Coords to cut = {coords_to_cut} \n Coords to cut local = {coords_to_cut_local}")
+
+                    #Group coordinates order by Y coord
+                    grupos = {}
+                    for tupla in coords_to_cut_local:
+                        primer_elemento = tupla[0]
+                        if primer_elemento in grupos:
+                            grupos[primer_elemento].append(tupla)
+                        else:
+                            grupos[primer_elemento] = [tupla]
+
+                    for grupo in grupos:
+                        grupos[grupo] = sorted(grupos[grupo], key=lambda tupla: (tupla[0], tupla[1]))
+
+                                       
+                    print(f"A = {A} \n B = {B} \n Diference = {coords_to_cut} \n Grupos = {grupos}")
+
+                    verts = []
+                    for key, coords in dict(sorted(grupos.items())).items():
+                        vert = {'X': coords[0][0], 'Y': coords[0][2], 'U': coords[1][0], 'V': coords[1][2]}#Revisar si esto esta mal, revisar conversaciones con el chat CODEIUM
+                        verts.append(vert)
+
+                    print(f"\n Verts = {verts} \n")
+                    #cambiiar esta funcion para que escriba el codigo en XYUV
+                    self.write_to_file_by_arms(verts,actual_collection.name)#XYUV
+
+                    break            
+
+                '''if objeto['cutter'] == 'plane':
+                    obj_plane = objeto
+                    mesh = obj_plane.data
+                    coords_plane_area = [obj_plane.matrix_world @ vert.co for vert in mesh.vertices]
+                    print(coords_plane_area)
+                    print(f"Plane = {objeto['cutter']}")'''
+
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
@@ -2277,6 +2434,19 @@ class BUTTOM_CUSTOM13(bpy.types.Operator):
 
         return {'FINISHED'}  
 
+class BUTTOM_CUSTOM14(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM14_CutFoam"
+    bl_idname = "object.button_custom14"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        
+        funcion = funcs()
+        funcion.cut_and_group_parts(context)
+
+        print("execute button14 custom ok!")
+
+        return {'FINISHED'} 
 # PANEL UI (PART 1 DRAW)
 ####################################################
 
@@ -2457,7 +2627,7 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
     def draw(self, context):
         #variables
         layout = self.layout
-        if 'Top' in bpy.context.active_object and context.active_object.select_get():
+        if 'Top' in context.active_object and context.active_object.select_get():
             if context.active_object['Top'] == False:
 
                 #create simple row
@@ -2466,9 +2636,13 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
 
             elif context.active_object['Top'] == True:
 
+                if 'top_object_block' in context.scene: 
+                    actual_obj=context.scene['top_object_block'].name 
+                else:
+                    actual_obj=context.active_object.name
                 #create simple row
                 row01 = layout.row()
-                row01.label(text = f"Object : {context.active_object.name}")
+                row01.label(text = f"Object : { actual_obj }")
 
                 # add button custom
                 row01 = layout.row()
@@ -2523,12 +2697,22 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
                         # add button custom
                         row02 = layout.row()
                         row02.scale_y = 2
-                        row02.operator("object.button_custom13", text= "Group and cut")
+                        row02.operator("object.button_custom13", text= "Group")
 
             else:
                         #create simple row
                         row02 = layout.row()
                         row02.label(text = "Select a Top Part First")
+        elif 'cutter' in context.active_object and context.active_object.select_get() and context.active_object['cutter'] == 'plane':
+
+            #create simple row
+            row02 = layout.row()
+            row02.label(text = "Fifth Step")
+        
+            # add button custom
+            row02 = layout.row()
+            row02.scale_y = 2
+            row02.operator("object.button_custom14", text= "Cut")
 
 # REGISTER (PART 2)
 ####################################################
@@ -2558,6 +2742,7 @@ def register():
     bpy.utils.register_class(BUTTOM_CUSTOM11)
     bpy.utils.register_class(BUTTOM_CUSTOM12)
     bpy.utils.register_class(BUTTOM_CUSTOM13)
+    bpy.utils.register_class(BUTTOM_CUSTOM14)
 
 def unregister():
     bpy.utils.unregister_class(PANEL_CUSTOM_UI_00)
@@ -2585,6 +2770,7 @@ def unregister():
     bpy.utils.unregister_class(BUTTOM_CUSTOM11)
     bpy.utils.unregister_class(BUTTOM_CUSTOM12)
     bpy.utils.unregister_class(BUTTOM_CUSTOM13)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM14)
 
 if __name__ == "__main__":
     register()
