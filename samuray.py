@@ -32,6 +32,8 @@ class funcs():
     foam_block_y = 0.980
     foam_block_z = 1.180
 
+    dist_X_center = 1.137
+
     cut_thickness_xy = 0.02
     cut_thickness_z = 0.002
 
@@ -87,7 +89,7 @@ class funcs():
         cnc_size_Y = 2.095
         cnc_size_Z = 1.250
         scale = 1
-        dist_X_center = 1.137 #distance X from bootom to center
+        dist_X_center = self.dist_X_center #distance X from bootom to center
         
         cnc_center_X = ((cnc_size_X/2)-dist_X_center)
         cnc_center_Y = cnc_size_Y/2
@@ -320,7 +322,7 @@ class funcs():
         cnc_size_X = 2.150
         cnc_size_Y = 2.095
         cnc_size_Z = 1.250
-        dist_X_center = 1.137 #distance X from bootom to center
+        dist_X_center = self.dist_X_center #distance X from bootom to center
 
         # store the location of current 3d cursor
         #saved_location = bpy.context.scene.cursor.location.xyz   # returns a vector
@@ -1955,8 +1957,8 @@ class funcs():
         # Obtén la referencia a la colección del objeto activo
         actual_collection = objeto_activo.users_collection[0]
 
-        # Itera sobre los objetos en la colección
-        for objeto in actual_collection.objects:
+        # create a copy of the areaCNC block of the current collection
+        '''for objeto in actual_collection.objects:
             if objeto.name.startswith('areaCNC.'):
                 # Print object name
                 print(objeto.name)
@@ -1968,7 +1970,13 @@ class funcs():
                 actual_collection.objects.link(area_copy)
                 area_copy.location = context.scene['top_object_block'].location
                 #base block flag
-                area_copy['cutter']='block'
+                area_copy['cutter']="block"
+                coords_block_pre_cut = []
+                for vert in objeto.data.vertices:
+                        # Almacena las coordenadas del vértice
+                        coords_block_pre_cut.append(objeto.matrix_world @ vert.co)
+                print(f"original objeto {objeto.name} \ncoords_clean_area = {coords_block_pre_cut}")
+                break'''
 
         # Crea un nuevo plano
         bpy.ops.mesh.primitive_plane_add(size=2.6, enter_editmode=False, location=objeto_activo.location)
@@ -1986,6 +1994,12 @@ class funcs():
         #myFunc = funcs()
 
         #bpy.context.view_layer.objects.active = objeto_copia
+
+        for objeto in actual_collection.objects:
+            if objeto.name.startswith('areaCNC.'):
+                vertices_co = [vertex.co for vertex in objeto.data.vertices]
+                # Print object name
+                print(f"final - {objeto.name} coords_clean_area = {vertices_co}")
 
     def change_origin_front_left_bottom(self, context, object):
         
@@ -2018,7 +2032,28 @@ class funcs():
     def cut_and_group_parts(self, context):
         cutter_obj = context.active_object
         actual_collection = cutter_obj.users_collection[0]
-        
+        print(f'------------------->actual_collection.name = {actual_collection.name} \n cutter_obj.name = {cutter_obj.name}')
+        for objeto in actual_collection.objects:
+            if objeto.name.startswith('areaCNC.'):
+                # Print object name
+                print(objeto.name)
+
+                area_copy = objeto.copy()
+                area_copy.data = objeto.data.copy()
+                #show hidden block
+                area_copy.hide_viewport = False
+                actual_collection.objects.link(area_copy)
+                area_copy.location = context.scene['top_object_block'].location
+                #base block flag
+                area_copy['cutter']="block"
+
+                coords_block_pre_cut = []
+                for vert in objeto.data.vertices:
+                        # Almacena las coordenadas del vértice
+                        coords_block_pre_cut.append(objeto.matrix_world @ vert.co)
+                print(f"original objeto {objeto.name} \ncoords_clean_area = {coords_block_pre_cut}")
+                break
+
         for objeto in actual_collection.objects:
             if 'cutter' in objeto:
                 if objeto['cutter']=='block':
@@ -2027,16 +2062,13 @@ class funcs():
                     # Obtén la referencia al objeto mesh del objeto cubo
                     mesh = obj_block.data
 
-                    coords_clean_area = []
-                    coords_plane_area = []
+                    coords_block_pre_cut = []
 
-                    # Itera sobre los vértices del mesh
-                    for vert in mesh.vertices:
-                        # Almacena las coordenadas del vértice
-                        coords_clean_area.append(obj_block.matrix_world @ vert.co)
-                    print(coords_clean_area)
+                    # Get the vertices of the object before cutting
+                    coords_block_pre_cut = [ vert.co for vert in mesh.vertices]
+                    print(f"Copia objeto {obj_block.name} \ncoords_clean_area = {coords_block_pre_cut}")
 
-                    print(f"Block = {objeto['cutter']}")
+                    print(f"Block = {objeto['cutter']}\n")
 
                     boolean_modifier_block = obj_block.modifiers.new(name="temporal_cut_001", type='BOOLEAN')
                     boolean_modifier_block.solver = 'FAST'
@@ -2044,27 +2076,28 @@ class funcs():
                     bpy.context.view_layer.objects.active = obj_block    
                     bpy.ops.object.select_all(action='DESELECT')  # Deselect all objects                
                     obj_block.hide_select = False
-                    obj_block.select_set(True)
-
-                    self.change_origin_front_left_bottom(context, obj_block)                    
+                    obj_block.select_set(True)             
 
                     bpy.ops.object.modifier_apply(modifier=boolean_modifier_block.name)
                     
                     obj_block_cut = objeto
                     mesh = obj_block_cut.data
-                    coords_block_cut = [obj_block_cut.matrix_world @ vert.co for vert in mesh.vertices]
-                    print(coords_block_cut)
-                    print(f"Block-Cut = {objeto['cutter']}")
+                    # Get the vertices of the object after cutting
+                    coords_block_cut = [ vert.co for vert in mesh.vertices]
+                    print(f"coords_block_cut = {coords_block_cut}\n")
+                    print(f"Block-Cut = {objeto['cutter']}\n")
                      
                     #Set coordinates to compare the block before and after cut
-                    A = set(tuple((round(coor.x,4),round(coor.y,4),round(coor.z,4))) for coor in coords_clean_area)
+                    A = set(tuple((round(coor.x,4),round(coor.y,4),round(coor.z,4))) for coor in coords_block_pre_cut)
                     B = set(tuple((round(coor.x,4),round(coor.y,4),round(coor.z,4))) for coor in coords_block_cut)
                     coords_to_cut = (B-A)
                     
                     #change coords_to_cut to local coords
-                    coords_to_cut_local = tuple((round(coord[0], 4)*-1000,round(coord[1], 4)*1000,round(coord[2], 4)*1000) for coord in [obj_block.matrix_world.inverted() @ Vector((vert)) for vert in coords_to_cut])
+                    coords_to_cut_local = tuple((round(((coord[0]-self.dist_X_center)*-1000), 4), round((coord[1]*1000), 4), round((coord[2]*1000), 4)) for coord in [Vector((vert)) for vert in coords_to_cut])
 
-                    print(f"Coords to cut = {coords_to_cut} \n Coords to cut local = {coords_to_cut_local}")
+                    #coords_to_cut_local = [obj_block_cut.matrix_world @ vert.co for vert in coords_to_cut] 
+
+                    print(f"Coords A-B to cut = {coords_to_cut} \n Coords to cut local = {coords_to_cut_local}")
 
                     #Group coordinates order by Y coord
                     grupos = {}
@@ -2083,14 +2116,14 @@ class funcs():
 
                     verts = []
                     for key, coords in dict(sorted(grupos.items())).items():
-                        vert = {'X': coords[0][0], 'Y': coords[0][2], 'U': coords[1][0], 'V': coords[1][2]}#Revisar si esto esta mal, revisar conversaciones con el chat CODEIUM
+                        vert = {'X': coords[0][0], 'Y': coords[0][2], 'U': coords[1][0], 'V': coords[1][2]}
                         verts.append(vert)
 
                     print(f"\n Verts = {verts} \n")
-                    #cambiiar esta funcion para que escriba el codigo en XYUV
+                    #cambiar esta funcion para que escriba el codigo en XYUV
                     self.write_to_file_by_arms(verts,actual_collection.name)#XYUV
 
-                    break            
+                    break        
 
                 '''if objeto['cutter'] == 'plane':
                     obj_plane = objeto
