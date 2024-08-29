@@ -23,7 +23,7 @@ import os, errno
 #dir = os.path.dirname(bpy.data.filepath)
 #print(f"------->{dir}")
 #funcs = bpy.data.texts["funcs.py"].as_module()
-
+funcion = None
 #Funciones
 class funcs():
 
@@ -47,9 +47,14 @@ class funcs():
 
     # list of top objects that will be grouped and will be cut
     list_top_objects = []
+    
 
     def __init__(self):
         self.select_before = None
+        # top object that will be blocked
+        self.main_top_object_blocked = ""
+        # top object that will be groupen to the blocked object
+        self.top_object_to_group = ""
 
     def setSizeBlock(self,context, x, y, z):
         # Actualiza los valores introducidos por el usuario
@@ -1860,9 +1865,11 @@ class funcs():
 
         if 'top_object_block' not in context.scene:
             context.scene['top_object_block'] = context.active_object
+            self.main_top_object_blocked=context.active_object
         elif context.scene['top_object_block'] == context.active_object:
             del context.scene['top_object_block']
-        elif context.scene['top_object_block'] != context.active_object:            
+        elif context.scene['top_object_block'] != context.active_object:    
+            self.main_top_object_blocked.hide_select = False       
             context.active_object.location = context.scene['save_location']
             context.active_object.rotation_euler = [0, 0, 0]            
             context.active_object.users_collection[0].hide_viewport = True
@@ -1883,10 +1890,18 @@ class funcs():
         for collection in all_collections:
             if collection.name != active_obj.users_collection[0].name:
                 collection.hide_viewport = not collection.hide_viewport
+                '''for objeto in collection.objects:
+                    if 'group' in objeto and objeto['group'] != active_obj['group']:  
+                        print(f"ACTUAL OBJECT GROUP {active_obj.name}-{active_obj['group']} check to {objeto.name} gruop {objeto['group']}")                      
+                        collection.hide_viewport = not collection.hide_viewport
+                        #break'''
 
         #print(f"Coleccion actual {active_obj.users_collection[0].name} estado {context.scene['top_object_block'].name}")
 
     def change_select_top_part(self, context,direction = 1):
+        main_top_object_blocked = self.main_top_object_blocked
+        
+
         top_object_list = context.scene['my_top_object_list']
         if context.active_object.select_get() == True:
             obj_active_name = context.active_object.name
@@ -1898,17 +1913,26 @@ class funcs():
                     # Calculate the next index using modulo to handle wrapping around the list, when index is the last -1 in the list it will be 0
                     index_next = (index + direction) % len(top_object_list)
                     obj_next = bpy.data.objects[top_object_list[index_next]]  # Get the next object from the list
+                    while 'group' in obj_next:                        
+                        obj_next = bpy.data.objects[top_object_list[index_next]] 
+                        print(f"WHILE obj_next = {obj_next.name} have group = {'group' in obj_next},  obj_active_name = {obj_active_name}------------------------\n")
+                        index_next = (index_next + direction) % len(top_object_list)
                 else:  # If top_object_list is empty
                     index_next = 0
                     obj_next = bpy.data.objects[top_object_list[index_next]]  # Get the first object from the list
-
+                print(f"------------------------obj_next = {obj_next.name} have group = {'group' in obj_next},  obj_active_name = {obj_active_name}------------------------\n")                
                 obj_next.users_collection[0].hide_viewport = False #let selected blocked object be visible
                 for object in obj_next.users_collection[0].objects:
                         if object.name.startswith('areaCNC.') and object.users_collection[0].name != coll_active_name:
                             #object.hide_viewport = not object.hide_viewport
                             object.hide_viewport = True
                             #print(f'------------> OCULTAR {object.name} = {object.hide_viewport}  coll_actual={object.users_collection[0].name} Coll_act={coll_active_name}')
-                            break  
+                            #break
+                        if object.name.startswith('foamBlock.') and object.users_collection[0].name != coll_active_name:
+                            #object.hide_viewport = not object.hide_viewport
+                            object.hide_viewport = True
+                            #print(f'------------> OCULTAR {object.name} = {object.hide_viewport}  coll_actual={object.users_collection[0].name} Coll_act={coll_active_name}')
+                            #break
                        
                 if context.scene['top_object_block'].name != obj_active_name:
                     context.active_object.location = context.scene['save_location']
@@ -1928,9 +1952,18 @@ class funcs():
                     context.active_object.users_collection[0].hide_viewport = True
                 '''for obj in context.active_object.users_collection[0].objects:
                     obj.hide_viewport = not obj.hide_viewport'''
+                
+                #------------------------Change selection to next object------------------------
 
                 bpy.ops.object.select_all(action='DESELECT')  # Deselect all objects
-                
+
+                #block selection of main_top_object_blocked
+                if main_top_object_blocked.name == obj_next.name:
+                    main_top_object_blocked.hide_select = False
+                    print("main_top_object_blocked.hide_select = False\n")
+                else:
+                    main_top_object_blocked.hide_select = True
+                    print("main_top_object_blocked.hide_select = True\n")
                 obj_next.select_set(True)  # Select the next object
                 bpy.context.view_layer.objects.active = obj_next  # Set the next object as the active object
 
@@ -1943,40 +1976,24 @@ class funcs():
         print(f"-----------------------Rotar objetos top {context.active_object.rotation_euler[axis]}")
 
     def group_top_part(self, context):
+        # Get the main top object we work with
         
+        main_object_blocked = self.main_top_object_blocked
         # Obtén la referencia al objeto activo
         objeto_activo = context.active_object
         # add base block
         objeto_activo['group'] = context.scene['top_object_block'].name
+        main_object_blocked['group'] = context.scene['top_object_block'].name
         # add order
         if 'order_group' not in objeto_activo:
             objeto_activo['order_group'] = 0
         else:
             objeto_activo['order_group'] += 1
+
+        objeto_activo.hide_select = True
         
         # Obtén la referencia a la colección del objeto activo
         actual_collection = objeto_activo.users_collection[0]
-
-        # create a copy of the areaCNC block of the current collection
-        '''for objeto in actual_collection.objects:
-            if objeto.name.startswith('areaCNC.'):
-                # Print object name
-                print(objeto.name)
-
-                area_copy = objeto.copy()
-                area_copy.data = objeto.data.copy()
-                #show hidden block
-                area_copy.hide_viewport = False
-                actual_collection.objects.link(area_copy)
-                area_copy.location = context.scene['top_object_block'].location
-                #base block flag
-                area_copy['cutter']="block"
-                coords_block_pre_cut = []
-                for vert in objeto.data.vertices:
-                        # Almacena las coordenadas del vértice
-                        coords_block_pre_cut.append(objeto.matrix_world @ vert.co)
-                print(f"original objeto {objeto.name} \ncoords_clean_area = {coords_block_pre_cut}")
-                break'''
 
         # Crea un nuevo plano
         bpy.ops.mesh.primitive_plane_add(size=2.6, enter_editmode=False, location=objeto_activo.location)
@@ -1990,8 +2007,12 @@ class funcs():
         cuter_plane.lock_scale = (True, True, True)
 
         # Cambia la colección del plano al mismo que el objeto activo
-        actual_collection.objects.link(cuter_plane)
-        #myFunc = funcs()
+        cuter_plane.users_collection[0].objects.unlink(cuter_plane)
+        main_object_blocked.users_collection[0].objects.link(cuter_plane)
+        # Copia la colección del objeto activo a la colección de la base        
+        context.scene.collection.children.unlink(objeto_activo.users_collection[0])
+        main_object_blocked.users_collection[0].children.link(objeto_activo.users_collection[0])
+        print(f"///////////////****{main_object_blocked.users_collection[0].name} - {objeto_activo.users_collection[0].name}")
 
         #bpy.context.view_layer.objects.active = objeto_copia
 
@@ -2032,11 +2053,14 @@ class funcs():
     def cut_and_group_parts(self, context):
         cutter_obj = context.active_object
         actual_collection = cutter_obj.users_collection[0]
+        main_object_blocked = self.main_top_object_blocked
         print(f'------------------->actual_collection.name = {actual_collection.name} \n cutter_obj.name = {cutter_obj.name}')
+
+
         for objeto in actual_collection.objects:
             if objeto.name.startswith('areaCNC.'):
                 # Print object name
-                print(objeto.name)
+                #print(objeto.name)
 
                 area_copy = objeto.copy()
                 area_copy.data = objeto.data.copy()
@@ -2051,7 +2075,7 @@ class funcs():
                 for vert in objeto.data.vertices:
                         # Almacena las coordenadas del vértice
                         coords_block_pre_cut.append(objeto.matrix_world @ vert.co)
-                print(f"original objeto {objeto.name} \ncoords_clean_area = {coords_block_pre_cut}")
+                #print(f"original objeto {objeto.name} \ncoords_clean_area = {coords_block_pre_cut}")
                 break
 
         for objeto in actual_collection.objects:
@@ -2066,9 +2090,9 @@ class funcs():
 
                     # Get the vertices of the object before cutting
                     coords_block_pre_cut = [ vert.co for vert in mesh.vertices]
-                    print(f"Copia objeto {obj_block.name} \ncoords_clean_area = {coords_block_pre_cut}")
+                    #print(f"Copia objeto {obj_block.name} \ncoords_clean_area = {coords_block_pre_cut}")
 
-                    print(f"Block = {objeto['cutter']}\n")
+                    #print(f"Block = {objeto['cutter']}\n")
 
                     boolean_modifier_block = obj_block.modifiers.new(name="temporal_cut_001", type='BOOLEAN')
                     boolean_modifier_block.solver = 'FAST'
@@ -2084,8 +2108,8 @@ class funcs():
                     mesh = obj_block_cut.data
                     # Get the vertices of the object after cutting
                     coords_block_cut = [ vert.co for vert in mesh.vertices]
-                    print(f"coords_block_cut = {coords_block_cut}\n")
-                    print(f"Block-Cut = {objeto['cutter']}\n")
+                    #print(f"coords_block_cut = {coords_block_cut}\n")
+                    #print(f"Block-Cut = {objeto['cutter']}\n")
                      
                     #Set coordinates to compare the block before and after cut
                     A = set(tuple((round(coor.x,4),round(coor.y,4),round(coor.z,4))) for coor in coords_block_pre_cut)
@@ -2097,7 +2121,7 @@ class funcs():
 
                     #coords_to_cut_local = [obj_block_cut.matrix_world @ vert.co for vert in coords_to_cut] 
 
-                    print(f"Coords A-B to cut = {coords_to_cut} \n Coords to cut local = {coords_to_cut_local}")
+                    #print(f"Coords A-B to cut = {coords_to_cut} \n Coords to cut local = {coords_to_cut_local}")
 
                     #Group coordinates order by Y coord
                     grupos = {}
@@ -2111,8 +2135,26 @@ class funcs():
                     for grupo in grupos:
                         grupos[grupo] = sorted(grupos[grupo], key=lambda tupla: (tupla[0], tupla[1]))
 
-                                       
-                    print(f"A = {A} \n B = {B} \n Diference = {coords_to_cut} \n Grupos = {grupos}")
+                    #remove block that was cut
+                    bpy.data.objects.remove(obj_block)
+
+                    
+                    bpy.data.objects["cutterPlane.001"].name = 'cutterPlane.CUT.001'
+                    
+                    #print(f"*******002********** MAIN BLOCKED = {main_object_blocked.users_collection[0].name}")
+
+                    # active main object
+                    bpy.context.view_layer.objects.active = main_object_blocked
+                    # deselect all
+                    bpy.ops.object.select_all(action='DESELECT')
+                    # select the main object
+                    main_object_blocked.hide_select = False
+                    main_object_blocked.select_set(True)
+
+                    # set flag for cut object
+                    # cutter_obj['groupto']=main_object_blocked.name
+                    
+                    #print(f"A = {A} \n B = {B} \n Diference = {coords_to_cut} \n Grupos = {grupos}")
 
                     verts = []
                     for key, coords in dict(sorted(grupos.items())).items():
@@ -2122,15 +2164,8 @@ class funcs():
                     print(f"\n Verts = {verts} \n")
                     #cambiar esta funcion para que escriba el codigo en XYUV
                     self.write_to_file_by_arms(verts,actual_collection.name)#XYUV
-
+                    
                     break        
-
-                '''if objeto['cutter'] == 'plane':
-                    obj_plane = objeto
-                    mesh = obj_plane.data
-                    coords_plane_area = [obj_plane.matrix_world @ vert.co for vert in mesh.vertices]
-                    print(coords_plane_area)
-                    print(f"Plane = {objeto['cutter']}")'''
 
 
 # BUTTON CUSTOM (OPERATOR)
@@ -2265,6 +2300,9 @@ class BUTTOM_CUSTOM01(bpy.types.Operator):
         print("execute button01 ---custom ok!")
 
         return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom01"
     
 class BUTTOM_CUSTOM02(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM02_Cut"
@@ -2280,6 +2318,9 @@ class BUTTOM_CUSTOM02(bpy.types.Operator):
         print("execute button02 custom ok!")
 
         return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom02"
     
 #----------------------------------------------------------    
 
@@ -2297,6 +2338,9 @@ class BUTTOM_CUSTOM03(bpy.types.Operator):
         print("execute button03 custom ok!")
 
         return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom03"
     
 class BUTTOM_CUSTOM04(bpy.types.Operator):
     bl_label = "Calibrate Cut in Z axis"
@@ -2334,6 +2378,9 @@ class BUTTOM_CUSTOM04(bpy.types.Operator):
         print("execute button04 custom ok!, Update:" + str(self.udpdate_value_bool))
 
         return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom04"
     
 class BUTTOM_CUSTOM05(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM05_CutFoam"
@@ -2348,6 +2395,9 @@ class BUTTOM_CUSTOM05(bpy.types.Operator):
         print("execute button05 custom ok!")
 
         return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom05"
 
 #-----------------------------------------------------------
 
@@ -2358,12 +2408,17 @@ class BUTTOM_CUSTOM06(bpy.types.Operator):
 
     def execute(self, context):
         
-        funcion = funcs()
+        global funcion
+        if funcion is None:
+            funcion = funcs()
         funcion.block_base_top_part(context)
 
         print("execute button06 custom ok!")
 
-        return {'FINISHED'}    
+        return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom06"  
 
 class BUTTOM_CUSTOM07(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM07_CutFoam"
@@ -2374,14 +2429,16 @@ class BUTTOM_CUSTOM07(bpy.types.Operator):
 
     def execute(self, context):
         
-        funcion = funcs()
+        global funcion
+        if funcion is None:
+            funcion = funcs()
         funcion.change_select_top_part(context,-1)
         print("execute button07 custom ok!")
 
         return {'FINISHED'} 
     @classmethod
     def description(cls, context, properties):
-        return "draw_init()"
+        return "object.button_custom07"
 
 class BUTTOM_CUSTOM08(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM08_CutFoam"
@@ -2390,12 +2447,17 @@ class BUTTOM_CUSTOM08(bpy.types.Operator):
 
     def execute(self, context):
         
-        funcion = funcs()
+        global funcion
+        if funcion is None:
+            funcion = funcs()
         funcion.change_select_top_part(context,1)
 
         print("execute button08 custom ok!")
 
-        return {'FINISHED'}     
+        return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom08"    
 
 class BUTTOM_CUSTOM09(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM09_CutFoam"
@@ -2409,7 +2471,10 @@ class BUTTOM_CUSTOM09(bpy.types.Operator):
 
         print("execute button09 custom ok!")
 
-        return {'FINISHED'} 
+        return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom09"
 
 class BUTTOM_CUSTOM10(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM10_CutFoam"
@@ -2423,7 +2488,10 @@ class BUTTOM_CUSTOM10(bpy.types.Operator):
 
         print("execute button10 custom ok!")
 
-        return {'FINISHED'} 
+        return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom10"
 
 class BUTTOM_CUSTOM11(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM11_CutFoam"
@@ -2437,7 +2505,10 @@ class BUTTOM_CUSTOM11(bpy.types.Operator):
 
         print("execute button11 custom ok!")
 
-        return {'FINISHED'}      
+        return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom11"   
 
 class BUTTOM_CUSTOM12(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM12_CutFoam"
@@ -2451,7 +2522,10 @@ class BUTTOM_CUSTOM12(bpy.types.Operator):
 
         print("execute button12 custom ok!")
 
-        return {'FINISHED'}   
+        return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom12"
 
 class BUTTOM_CUSTOM13(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM13_CutFoam"
@@ -2460,12 +2534,17 @@ class BUTTOM_CUSTOM13(bpy.types.Operator):
 
     def execute(self, context):
         
-        funcion = funcs()
+        global funcion
+        if funcion is None:
+            funcion = funcs()
         funcion.group_top_part(context)
 
         print("execute button13 custom ok!")
 
-        return {'FINISHED'}  
+        return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom13"
 
 class BUTTOM_CUSTOM14(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM14_CutFoam"
@@ -2474,12 +2553,17 @@ class BUTTOM_CUSTOM14(bpy.types.Operator):
 
     def execute(self, context):
         
-        funcion = funcs()
+        global funcion
+        if funcion is None:
+            funcion = funcs()
         funcion.cut_and_group_parts(context)
 
         print("execute button14 custom ok!")
 
-        return {'FINISHED'} 
+        return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom14"
 # PANEL UI (PART 1 DRAW)
 ####################################################
 
@@ -2650,7 +2734,7 @@ class PANEL_CUSTOM_UI_02(bpy.types.Panel):
         row01.operator("object.button_custom05", text= "Export GCODE and RawForm", icon = "FILE_TICK")
 
 class PANEL_CUSTOM_UI_03(bpy.types.Panel):
-    bl_label = "Small Parts"
+    bl_label = "TOP Parts"
     bl_idname = "OBJECT_PT_panel_03"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
