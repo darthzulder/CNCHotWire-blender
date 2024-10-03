@@ -34,7 +34,8 @@ class funcs():
 
     dist_X_center = 1.137
 
-    cut_thickness_xy = 0.02
+    cut_thickness_x = 0.02
+    cut_thickness_y = 0.06
     cut_thickness_z = 0.002
 
     wood_total_heigh = 0.042 + 8/1000
@@ -136,12 +137,12 @@ class funcs():
         # set 3dcursor location back to the stored location
         bpy.context.scene.cursor.location = saved_location
 
-    def create_block_greed (self, dimensions_X, dimensions_Y, dimensions_Z, foam_size_X, foam_size_Y, foam_size_Z, separation , scale = 1):
+    def create_block_greed (self, dimensions_X, dimensions_Y, dimensions_Z, foam_size_X, foam_size_Y, foam_size_Z, separation_x, separation_y , scale = 1):
         #print(f"-------create_block_greed>{dir}")
         # IN METERS
         n_blocks_x = math.ceil(dimensions_X/foam_size_X)
         n_blocks_y = math.ceil(dimensions_Y/foam_size_Y)
-        n_blocks_z = math.ceil((dimensions_Z+separation)/foam_size_Z)
+        n_blocks_z = math.ceil((dimensions_Z+separation_x)/foam_size_Z)
                                           
         # create primitive cube as foamBlock
         # change cursor location
@@ -155,7 +156,7 @@ class funcs():
         # Get the object to apply the mod
         obj = bpy.context.object
         # Move the object
-        obj.location = (separation/2,separation/2,foam_size_Z/2)
+        obj.location = (separation_x/2,separation_y/2,foam_size_Z/2)
 
         # change cursor location
         bpy.context.scene.cursor.location =(0,0,0)
@@ -173,13 +174,13 @@ class funcs():
         array_modifier1.count = n_blocks_y  # Número de repeticiones
         array_modifier1.relative_offset_displace = (0.0, 1.0, 0.0)  # Desplazamiento relativo
         array_modifier1.use_constant_offset = True  # Usar desplazamiento constante
-        array_modifier1.constant_offset_displace = (0.0, separation*scale, 0.0)  # Desplazamiento constante
+        array_modifier1.constant_offset_displace = (0.0, separation_y*scale, 0.0)  # Desplazamiento constante
 
         # Definir las propiedades del modificador
         array_modifier2.count = n_blocks_x  # Número de repeticiones
         array_modifier2.relative_offset_displace = (1.0, 0.0, 0.0)  # Desplazamiento relativo
         array_modifier2.use_constant_offset = True  # Usar desplazamiento constante
-        array_modifier2.constant_offset_displace = (separation*scale, 0.0, 0.0)  # Desplazamiento constante
+        array_modifier2.constant_offset_displace = (separation_x*scale, 0.0, 0.0)  # Desplazamiento constante
 
         if n_blocks_z > 1 :
             array_modifier3 = obj.modifiers.new(name="Array_Z", type='ARRAY')
@@ -225,7 +226,7 @@ class funcs():
         # Agregar la colección "Blocks" a la escena
         bpy.context.scene.collection.children.link(blocks_collection)      
 
-    def create_cutter_planes (self, dimensions_X,dimensions_Y, dimensions_Z, separation_z, separation_x, separation_y,  plane_thickness, scale = 1):               
+    def create_cutter_planes (self, dimensions_X,dimensions_Y, dimensions_Z, separation_z, separation_x, separation_y,  plane_thickness_x,  plane_thickness_y, scale = 1):               
 
         plane_size_high = (dimensions_Z+0.5)
         #division_hight_z = plane_thickness
@@ -267,7 +268,7 @@ class funcs():
 
         # Definir las propiedades del modificador
         array_modifier_X2.offset = 0
-        array_modifier_X2.thickness = plane_thickness
+        array_modifier_X2.thickness = plane_thickness_x
 
         # -----create primitive Plane as cutterPlane --Cuts in Y--
         # change cursor location
@@ -293,7 +294,7 @@ class funcs():
 
         # Definir las propiedades del modificador
         array_modifier_Y2.offset = 0
-        array_modifier_Y2.thickness = plane_thickness
+        array_modifier_Y2.thickness = plane_thickness_y
 
         # -----create primitive Plane as cutterPlane --Cuts in Z--
         # change cursor location
@@ -371,7 +372,7 @@ class funcs():
 
         return AreaCNC
 
-    def create_woods (self, dimensions_X,dimensions_Y, dimensions_Z, separation_z, separation_x, separation_y,  plane_thickness, scale = 1):
+    def create_woods (self, dimensions_X,dimensions_Y, dimensions_Z, separation_z, separation_x, separation_y,  plane_thickness_x,  plane_thickness_y, scale = 1):
 
         plane_size_high = (separation_z+0.5)
 
@@ -385,14 +386,18 @@ class funcs():
         dim_plane_x=math.ceil(dimensions_X/separation_x)*separation_x+1.5
         dim_plane_y=math.ceil(dimensions_Y/separation_y)*separation_y+2
             
+        #location_x = (dim_plane_x-1.5)/2
+        #location_y = (dim_plane_y-2)/2
+        #location_z = (plane_size_high-0.5)/2
+
         location_x = (dim_plane_x-1.5)/2
         location_y = (dim_plane_y-2)/2
-        #location_z = (plane_size_high-0.5)/2
-        location_z = wood_heigh/2+wood_width #floor position
-        
+        #location_z = wood_heigh/2+wood_width #floor position
+        location_z = (plane_size_high-0.5)/2
+
         # -----create primitive Plane as cutterPlane --Cuts in X--
         # change cursor location
-        bpy.context.scene.cursor.location =(separation_x/2,location_y,location_z)
+        bpy.context.scene.cursor.location =(separation_x-(wood_width/2), location_y, location_z-(wood_heigh/2+wood_width/2))
         bpy.ops.mesh.primitive_cube_add(size=scale)
         cutterWood_X = bpy.context.object
         cutterWood_X.name = "innerWood_x.001"
@@ -411,7 +416,7 @@ class funcs():
 
         # -----create primitive Plane as cutterPlane --Cuts in Y--
         # change cursor location
-        bpy.context.scene.cursor.location =(location_x,separation_y/2,location_z-wood_heigh/2-wood_width/2)
+        bpy.context.scene.cursor.location =(location_x, separation_y, location_z)
         bpy.ops.mesh.primitive_cube_add(size=scale)
         cutterWood_Y = bpy.context.object
         cutterWood_Y.name = "innerWood_y.001"
@@ -442,14 +447,15 @@ class funcs():
         y_value = context.scene.my_number_settings.my_number_property_foam_block_y
         z_value = context.scene.my_number_settings.my_number_property_foam_block_z
 
-        foam_block_hight_x = x_value + self.cut_thickness_xy
-        foam_block_hight_y = y_value + self.cut_thickness_xy
+        foam_block_hight_x = x_value + self.cut_thickness_x
+        foam_block_hight_y = y_value + self.cut_thickness_y
         foam_block_hight_z = z_value        
 
         print(f"from context foam_block_hight_x:{foam_block_hight_x} foam_block_hight_y:{foam_block_hight_y} foam_block_hight_z:{foam_block_hight_z}")
         print(f"from self foam_block_hight_x:{self.foam_block_x} foam_block_hight_y:{self.foam_block_y} foam_block_hight_z:{self.foam_block_z}")
 
-        separation = self.cut_thickness_xy
+        separation_x = self.cut_thickness_x
+        separation_y = self.cut_thickness_y
         # get object
         selected_object = bpy.context.active_object
         # get object dimensions
@@ -460,8 +466,8 @@ class funcs():
         dimensions_Y = round(dimensions.y,1)
         dimensions_Z = round(dimensions.z,1)   
 
-        self.create_cutter_planes(dimensions_X,dimensions_Y,dimensions_Z,foam_block_hight_z,foam_block_hight_x,foam_block_hight_y,separation, scale = 1) 
-        self.create_woods(dimensions_X,dimensions_Y,dimensions_Z,foam_block_hight_z,foam_block_hight_x,foam_block_hight_y, separation, scale = 1)
+        self.create_cutter_planes(dimensions_X,dimensions_Y,dimensions_Z,foam_block_hight_z,foam_block_hight_x,foam_block_hight_y,separation_x,separation_y, scale = 1) 
+        self.create_woods(dimensions_X,dimensions_Y,dimensions_Z,foam_block_hight_z,foam_block_hight_x,foam_block_hight_y, separation_x,separation_y, scale = 1)
        
         bpy.ops.object.select_all(action='DESELECT')              
 
@@ -479,7 +485,8 @@ class funcs():
         foam_size_Y = context.scene.my_number_settings.my_number_property_foam_block_y
         foam_size_Z = context.scene.my_number_settings.my_number_property_foam_block_z
 
-        separation = self.cut_thickness_xy
+        separation_x = self.cut_thickness_x
+        separation_y = self.cut_thickness_y
 
         selected_object = bpy.context.active_object
         # get object dimensions
@@ -542,7 +549,7 @@ class funcs():
         # Agregar la colección "Blocks" a la escena
         bpy.context.scene.collection.children.link(cut_blocks_collection) 
 
-        self.create_block_greed(dimensions_X,dimensions_Y,dimensions_Z,foam_size_X, foam_size_Y, foam_size_Z, separation, scale = 1)
+        self.create_block_greed(dimensions_X,dimensions_Y,dimensions_Z,foam_size_X, foam_size_Y, foam_size_Z, separation_x, separation_y, scale = 1)
 
     def cut_and_order_parts(self, context):
         print('******inner_part_verif***********')
@@ -560,7 +567,7 @@ class funcs():
         selected_object = bpy.context.active_object
         # get new origin coordinates
         dimensions_Z = selected_object.dimensions.z 
-        n_blocks_z = math.ceil((dimensions_Z+self.cut_thickness_xy)/foam_size_Z)
+        n_blocks_z = math.ceil((dimensions_Z+self.cut_thickness_x)/foam_size_Z)
         self.list_top_objects = []
 
         self.cut_object(context)
@@ -581,8 +588,8 @@ class funcs():
         
         vol_cubo_obj = abs(context.scene.my_number_settings.my_number_property_foam_block_x*context.scene.my_number_settings.my_number_property_foam_block_y*context.scene.my_number_settings.my_number_property_foam_block_z)
 
-        extra_x = self.cut_thickness_xy
-        extra_y = self.cut_thickness_xy
+        extra_x = self.cut_thickness_x
+        extra_y = self.cut_thickness_y
         extra_z = self.cut_thickness_z
 
         '''extra_x = 0
@@ -707,7 +714,7 @@ class funcs():
                 #bpy.context.scene.collection.children.link(blocks_collection)
             if object_irregular_obj.location.z < context.scene.my_number_settings.my_number_property_foam_block_z :
                 self.cut_wood(context, object_irregular_obj,'x')
-                self.cut_wood(context, object_irregular_obj,'y')
+                #self.cut_wood(context, object_irregular_obj,'y')
             #are top objects? set it as top
             if (n_blocks_z-1) * foam_size_Z <= object_irregular_obj.location.z:
                 self.list_top_objects.append(object_irregular_obj.name)
