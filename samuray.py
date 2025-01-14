@@ -13,16 +13,20 @@ bl_info = {
     "category": "User"
 }
 
-import bpy
-import bmesh
+# Importaciones estándar
+import os
+import errno
 import math
 import re
+
+# Importaciones de Blender
+import bpy
+import bmesh
 from mathutils import Vector
-#from . import funcs
-import os, errno
-#dir = os.path.dirname(bpy.data.filepath)
-#print(f"------->{dir}")
-#funcs = bpy.data.texts["funcs.py"].as_module()
+import mathutils
+# Importaciones locales (si las hubiera)
+# from . import funciones  # Descomentar si se utilizan funciones de otros módulos
+
 funcion = None
 #Funciones
 class funcs():
@@ -57,7 +61,7 @@ class funcs():
         # top object that will be groupen to the blocked object
         self.top_object_to_group = ""
 
-    def setSizeBlock(self,context, x, y, z):
+    def set_size_block(self,context, x, y, z):
         # Actualiza los valores introducidos por el usuario
         self.foam_block_x = float(x)
         self.foam_block_y = float(y)
@@ -100,7 +104,7 @@ class funcs():
         cnc_center_X = ((cnc_size_X/2)-dist_X_center)
         cnc_center_Y = cnc_size_Y/2
         cnc_center_Z = 0
-        
+
         # give 3dcursor new coordinates for the primitive cube
         bpy.context.scene.cursor.location =(0,0,cnc_size_Z/2)
         
@@ -109,7 +113,7 @@ class funcs():
         AreaCNC = bpy.context.object        
         AreaCNC.dimensions = (cnc_size_X, cnc_size_Y, cnc_size_Z)
         bpy.ops.object.transform_apply(scale=True)
-        
+
         # change cursor location
         bpy.context.scene.cursor.location =(cnc_center_X,0,0)
         # set the origin on the current object to the 3dcursor location
@@ -210,7 +214,7 @@ class funcs():
             # set the origin on the current object to the ceter of mass location
             bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS')
             # get object coordinates
-            coor_block = block.location            
+            coor_block = block.location
             # get new origin coordinates
             block_location_X = coor_block.x
             block_location_Y = coor_block.y
@@ -224,7 +228,7 @@ class funcs():
             original_collection.objects.unlink(block)
             blocks_collection.objects.link(block)
         # Agregar la colección "Blocks" a la escena
-        bpy.context.scene.collection.children.link(blocks_collection)      
+        bpy.context.scene.collection.children.link(blocks_collection)
 
     def create_cutter_planes (self, dimensions_X,dimensions_Y, dimensions_Z, separation_z, separation_x, separation_y,  plane_thickness_x,  plane_thickness_y, scale = 1):               
 
@@ -278,7 +282,7 @@ class funcs():
         cutterPlane_Y.name = "cutterPlane.002"
         cutterPlane_Y.dimensions = (dim_plane_x, plane_size_high, 0)
         cutterPlane_Y.rotation_euler = (math.radians(90),0,0)
-        bpy.ops.object.transform_apply(scale=True)        
+        bpy.ops.object.transform_apply(scale=True)
         cutterPlane_Y.hide_select =  True
 
         # Agregar el modificador Array
@@ -320,7 +324,7 @@ class funcs():
         # Definir las propiedades del modificador
         array_modifier_Z2.offset = 0
         #array_modifier_Z2.thickness = plane_thickness
-        array_modifier_Z2.thickness = division_hight_z    
+        array_modifier_Z2.thickness = division_hight_z
 
     def crate_cnc_area (self, object_scope, scale = 1):
         #print(f"-------create_cnc_area>{dir}")
@@ -348,7 +352,7 @@ class funcs():
         cnc_center_X = ((cnc_size_X/2)-dist_X_center)
         cnc_center_Y = cnc_size_Y/2
         cnc_center_Z = 0
-        
+
         # give 3dcursor new coordinates for the primitive cube
         bpy.context.scene.cursor.location =(0,0,cnc_size_Z/2)
         
@@ -358,7 +362,7 @@ class funcs():
         AreaCNC.name = "areaCNC.000" 
         AreaCNC.dimensions = (cnc_size_X, cnc_size_Y, cnc_size_Z)
         bpy.ops.object.transform_apply(scale=True)
-        
+
         # change cursor location
         bpy.context.scene.cursor.location =(cnc_center_X,0,0)
         # set the origin on the current object to the 3dcursor location
@@ -449,7 +453,7 @@ class funcs():
 
         foam_block_hight_x = x_value + self.cut_thickness_x
         foam_block_hight_y = y_value + self.cut_thickness_y
-        foam_block_hight_z = z_value        
+        foam_block_hight_z = z_value
 
         print(f"from context foam_block_hight_x:{foam_block_hight_x} foam_block_hight_y:{foam_block_hight_y} foam_block_hight_z:{foam_block_hight_z}")
         print(f"from self foam_block_hight_x:{self.foam_block_x} foam_block_hight_y:{self.foam_block_y} foam_block_hight_z:{self.foam_block_z}")
@@ -460,7 +464,7 @@ class funcs():
         selected_object = bpy.context.active_object
         # get object dimensions
         dimensions = selected_object.dimensions
-        
+
         # get new origin coordinates
         dimensions_X = round(dimensions.x,1)
         dimensions_Y = round(dimensions.y,1)
@@ -468,8 +472,8 @@ class funcs():
 
         self.create_cutter_planes(dimensions_X,dimensions_Y,dimensions_Z,foam_block_hight_z,foam_block_hight_x,foam_block_hight_y,separation_x,separation_y, scale = 1) 
         self.create_woods(dimensions_X,dimensions_Y,dimensions_Z,foam_block_hight_z,foam_block_hight_x,foam_block_hight_y, separation_x,separation_y, scale = 1)
-       
-        bpy.ops.object.select_all(action='DESELECT')              
+
+        bpy.ops.object.select_all(action='DESELECT')
 
         #-----Select the initial object
         selected_object.select_set(True)
@@ -478,7 +482,7 @@ class funcs():
         bpy.context.scene.cursor.location =(0,0,0)              
         # set 3dcursor location back to the stored location
         bpy.context.scene.cursor.location = saved_location
-    
+
     def cut_object(self, context):
 
         foam_size_X = context.scene.my_number_settings.my_number_property_foam_block_x
@@ -494,7 +498,7 @@ class funcs():
         # get new origin coordinates
         dimensions_X = dimensions.x
         dimensions_Y = dimensions.y
-        dimensions_Z = dimensions.z 
+        dimensions_Z = dimensions.z
 
         
 
@@ -525,15 +529,15 @@ class funcs():
 
         # Create a new collection
         cut_blocks_collection = bpy.data.collections.new("cut_Blocks")
-        
+
         i=0
         # Add parts to the collection "cut_Blocks"
         for block in objectBlocks:
             # set the origin on the current object to the ceter of mass location
             bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS')
-            
+
             # get object coordinates
-            coor_block = block.location            
+            coor_block = block.location
             # get new origin coordinates
             block_location_X = coor_block.x
             block_location_Y = coor_block.y
@@ -547,7 +551,7 @@ class funcs():
             original_collection.objects.unlink(block)
             cut_blocks_collection.objects.link(block)
         # Agregar la colección "Blocks" a la escena
-        bpy.context.scene.collection.children.link(cut_blocks_collection) 
+        bpy.context.scene.collection.children.link(cut_blocks_collection)
 
         self.create_block_greed(dimensions_X,dimensions_Y,dimensions_Z,foam_size_X, foam_size_Y, foam_size_Z, separation_x, separation_y, scale = 1)
 
@@ -566,7 +570,7 @@ class funcs():
         foam_size_Z = context.scene.my_number_settings.my_number_property_foam_block_z
         selected_object = bpy.context.active_object
         # get new origin coordinates
-        dimensions_Z = selected_object.dimensions.z 
+        dimensions_Z = selected_object.dimensions.z
         n_blocks_z = math.ceil((dimensions_Z+self.cut_thickness_x)/foam_size_Z)
         self.list_top_objects = []
 
@@ -580,7 +584,7 @@ class funcs():
             object['Top'] = False
             if object.name.startswith(f"{object_selected_name}."):
                 objects_irregular.append(object)
-            
+
 
         # Dictionary to store the relationship between cube objects and irregular objects
         relation_cube_irregular = {}
@@ -623,7 +627,7 @@ class funcs():
                     float(bbox_cube[0][i]) <= float(bbox_irregular[6][i]) <= float(bbox_cube[6][i])
                     for i in range(3)
                 )'''                
-                                
+
                 if is_inside:
                     relation_cube_irregular[object_irregular.name] = object_cube.name
                     have_something_inside = 1
@@ -640,14 +644,14 @@ class funcs():
             #Delete cube if don't have nothing inside            
             if have_something_inside == 0:
                 bpy.data.objects.remove(object_cube, do_unlink=True)
-        
+
         volumen_total_irregular_obj = 0
         volumen_total_cube_obj = 0
         quantity_cube_obj = 0
         for object_irregular, object_cube in (relation_cube_irregular.items()):
             #set objects                 
             object_irregular_obj = bpy.data.objects[object_irregular]
-            object_cube_obj = bpy.data.objects[object_cube]  
+            object_cube_obj = bpy.data.objects[object_cube]
 
             #lock modification but Z rotation
             object_irregular_obj.lock_rotation = (True, True, False)
@@ -656,7 +660,7 @@ class funcs():
             object_cube_obj.lock_rotation = (True, True, False)
             object_cube_obj.lock_location = (True, True, True)
             object_cube_obj.lock_scale = (True, True, True)
-            object_cube_obj.hide_select = True                
+            object_cube_obj.hide_select = True
 
             # --Set the origin on the current irregular object to the cube center
             # change cursor location
@@ -683,8 +687,8 @@ class funcs():
 
                 original_collection = object_cube_obj.users_collection[0]
                 original_collection.objects.unlink(object_cube_obj)
-                blocks_collection.objects.link(object_cube_obj)                
-                
+                blocks_collection.objects.link(object_cube_obj)
+
                 original_collection = object_irregular_obj.users_collection[0]
                 original_collection.objects.unlink(object_irregular_obj)
                 blocks_collection.objects.link(object_irregular_obj)
@@ -700,7 +704,7 @@ class funcs():
                 blocks_collection.objects.link(areaCNC) 
                 
                 # Add the created collection to the scene
-                bpy.context.scene.collection.children.link(blocks_collection) 
+                bpy.context.scene.collection.children.link(blocks_collection)
 
                 #set irregular object as parent of the cube
                 object_cube_obj.parent = object_irregular_obj
@@ -1670,6 +1674,7 @@ class funcs():
         objective_object[0].rotation_euler.x = math.radians(0)'''
 
 
+
         # - Rotate elements related to the middle of he object (for little parts floating in Z)-
         objective_object[0].location.x = 0
         if(objective_object[0].location.y < middle_pos and objective_object[0].location.z < foam_z):
@@ -1918,12 +1923,16 @@ class funcs():
             if obj_active_name in bpy.data.objects:  # Check if the object is in the scene
                 if len(top_object_list) > 0:  # Check if the top_object_list is not empty
                     # Calculate the next index using modulo to handle wrapping around the list, when index is the last -1 in the list it will be 0
-                    index_next = (index + direction) % len(top_object_list)
-                    obj_next = bpy.data.objects[top_object_list[index_next]]  # Get the next object from the list
-                    while 'group' in obj_next:                        
-                        obj_next = bpy.data.objects[top_object_list[index_next]] 
-                        print(f"WHILE obj_next = {obj_next.name} have group = {'group' in obj_next},  obj_active_name = {obj_active_name}------------------------\n")
-                        index_next = (index_next + direction) % len(top_object_list)
+                    if direction == 0:  
+                        index_next = top_object_list.index(context.scene['top_object_block'].name)
+                        obj_next = bpy.data.objects[top_object_list[index_next]]
+                    else:
+                        index_next = (index + direction) % len(top_object_list)
+                        obj_next = bpy.data.objects[top_object_list[index_next]]  # Get the next object from the list
+                        while 'group' in obj_next:                        
+                            obj_next = bpy.data.objects[top_object_list[index_next]] 
+                            print(f"WHILE obj_next = {obj_next.name} have group = {'group' in obj_next},  obj_active_name = {obj_active_name}------------------------\n")
+                            index_next = (index_next + direction) % len(top_object_list)
                 else:  # If top_object_list is empty
                     index_next = 0
                     obj_next = bpy.data.objects[top_object_list[index_next]]  # Get the first object from the list
@@ -1954,7 +1963,12 @@ class funcs():
                             #object.hide_viewport = not object.hide_viewport
                             object.hide_viewport = False
                             #print(f'------------> MOSTRAR {object.name} = {object.hide_viewport}')
-                            break
+                            #break
+                        if object.name.startswith('foamBlock.'):
+                            #object.hide_viewport = not object.hide_viewport
+                            object.hide_viewport = False
+                            #print(f'------------> MOSTRAR {object.name} = {object.hide_viewport}')
+                            #break
                     
                     context.active_object.users_collection[0].hide_viewport = True
                 '''for obj in context.active_object.users_collection[0].objects:
@@ -2028,6 +2042,24 @@ class funcs():
                 vertices_co = [vertex.co for vertex in objeto.data.vertices]
                 # Print object name
                 print(f"final - {objeto.name} coords_clean_area = {vertices_co}")
+
+    def create_cutter_plane(self, context):
+        main_object_blocked = self.main_top_object_blocked
+        objeto_activo = context.active_object
+        # Crea un nuevo plano
+        bpy.ops.mesh.primitive_plane_add(size=2.6, enter_editmode=False, location=objeto_activo.location)
+
+        # Obtén el plano recién creado
+        cuter_plane = bpy.context.active_object
+        cuter_plane.name = "cutterPlane.001"
+        cuter_plane['cutter']='plane'
+
+        cuter_plane.lock_location = (True, True, False)
+        cuter_plane.lock_scale = (True, True, True)
+
+        # Cambia la colección del plano al mismo que el objeto activo
+        cuter_plane.users_collection[0].objects.unlink(cuter_plane)
+        main_object_blocked.users_collection[0].objects.link(cuter_plane)
 
     def change_origin_front_left_bottom(self, context, object):
         
@@ -2145,7 +2177,7 @@ class funcs():
                     #remove block that was cut
                     bpy.data.objects.remove(obj_block)
 
-                    
+                    bpy.data.objects["cutterPlane.001"].hide_select = True
                     bpy.data.objects["cutterPlane.001"].name = 'cutterPlane.CUT.001'
                     
                     #print(f"*******002********** MAIN BLOCKED = {main_object_blocked.users_collection[0].name}")
@@ -2258,7 +2290,7 @@ class BUTTOM_SET_FOAM_SIZE(bpy.types.Operator):
         #func = myFunc
         func = funcs()
 
-        func.setSizeBlock(context, x_value, y_value, z_value)
+        func.set_size_block(context, x_value, y_value, z_value)
 
         print(f"Valores introducidos: X={x_value}, Y={y_value}, Z={z_value}")
         print(f"Valores Recuperados: X={func.foam_block_x}, Y={func.foam_block_y}, Z={func.foam_block_z}")
@@ -2282,7 +2314,7 @@ class BUTTOM_SET_FOAM_DEFAULT(bpy.types.Operator):
         context.scene.my_number_settings.my_number_property_foam_block_y = y_value
         context.scene.my_number_settings.my_number_property_foam_block_z = z_value
         
-        func.setSizeBlock(context, x_value, y_value, z_value)
+        func.set_size_block(context, x_value, y_value, z_value)
         print(f"Valores introducidos: X={x_value}, Y={y_value}, Z={z_value}")
         print(f"Valores Recuperados: X={func.foam_block_x}, Y={func.foam_block_y}, Z={func.foam_block_z}")
         return {'FINISHED'}
@@ -2354,7 +2386,7 @@ class BUTTOM_CUSTOM04(bpy.types.Operator):
     bl_idname = "object.button_custom04"
     bl_options = {'REGISTER','UNDO'} #REGISTER popup a little window in the left down corner to introduce the parameters values
 
-    udpdate_value_bool : bpy.props.BoolProperty(
+    update_value_bool : bpy.props.BoolProperty(
         name="update", 
         default=False, 
         options={'HIDDEN','SKIP_SAVE'}
@@ -2362,7 +2394,7 @@ class BUTTOM_CUSTOM04(bpy.types.Operator):
     
     def execute_updater(self, context):
         
-        self.udpdate_value_bool = True
+        self.update_value_bool = True
 
         return None
 
@@ -2379,10 +2411,10 @@ class BUTTOM_CUSTOM04(bpy.types.Operator):
     def execute(self, context):
         
         funcion = funcs()
-        funcion.cut_silhouette(self.location_z,self.udpdate_value_bool)
+        funcion.cut_silhouette(self.location_z,self.update_value_bool)
         #funcion.reorder_vertices(0)
         
-        print("execute button04 custom ok!, Update:" + str(self.udpdate_value_bool))
+        print("execute button04 custom ok!, Update:" + str(self.update_value_bool))
 
         return {'FINISHED'}
     @classmethod
@@ -2446,6 +2478,27 @@ class BUTTOM_CUSTOM07(bpy.types.Operator):
     @classmethod
     def description(cls, context, properties):
         return "object.button_custom07"
+    
+class BUTTOM_CUSTOM0705(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM0705_CutFoam"
+    bl_idname = "object.button_custom0705"
+    bl_options = {'UNDO'}
+
+    global funcion
+
+    def execute(self, context):
+        
+        global funcion
+        if funcion is None:
+            funcion = funcs()
+        funcion.change_select_top_part(context,0)
+        funcion.create_cutter_plane(context)
+        print("execute button07.05 custom ok!")
+
+        return {'FINISHED'} 
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom07.05"
 
 class BUTTOM_CUSTOM08(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM08_CutFoam"
@@ -2571,6 +2624,61 @@ class BUTTOM_CUSTOM14(bpy.types.Operator):
     @classmethod
     def description(cls, context, properties):
         return "object.button_custom14"
+
+# Sensibilidad del giro en grados
+sensitivity = 15.0
+# Función para rotar la vista relativa a su orientación actual
+def rotate_view(context, axis, angle_degrees):
+    region_3d = context.space_data.region_3d
+    angle_radians = math.radians(angle_degrees * sensitivity)
+    rotation_quaternion = mathutils.Quaternion(axis, angle_radians)
+    region_3d.view_rotation = rotation_quaternion @ region_3d.view_rotation
+
+# Función para actualizar la sensibilidad
+def update_sensitivity(self, context):
+    global sensitivity
+    sensitivity = context.scene.view_rotation_sensitivity
+
+# Operadores para cada botón de giro de vista
+class RotateViewLeft(bpy.types.Operator):
+    bl_idname = "view3d.rotate_view_left"
+    bl_label = "Rotate View Left"
+
+    def execute(self, context):
+        # Rotar alrededor del eje Z (global) hacia la izquierda
+        rotate_view(context, (0, 0, 1), 1)
+        return {'FINISHED'}
+
+class RotateViewRight(bpy.types.Operator):
+    bl_idname = "view3d.rotate_view_right"
+    bl_label = "Rotate View Right"
+
+    def execute(self, context):
+        # Rotar alrededor del eje Z (global) hacia la derecha
+        rotate_view(context, (0, 0, 1), -1)
+        return {'FINISHED'}
+
+class RotateViewUp(bpy.types.Operator):
+    bl_idname = "view3d.rotate_view_up"
+    bl_label = "Rotate View Up"
+
+    def execute(self, context):
+        # Rotar alrededor del eje "derecho" de la vista (x-axis de la vista) hacia arriba
+        region_3d = context.space_data.region_3d
+        right_axis = region_3d.view_rotation @ mathutils.Vector((1, 0, 0))
+        rotate_view(context, right_axis, 1)
+        return {'FINISHED'}
+
+class RotateViewDown(bpy.types.Operator):
+    bl_idname = "view3d.rotate_view_down"
+    bl_label = "Rotate View Down"
+
+    def execute(self, context):
+        # Rotar alrededor del eje "derecho" de la vista (x-axis de la vista) hacia abajo
+        region_3d = context.space_data.region_3d
+        right_axis = region_3d.view_rotation @ mathutils.Vector((1, 0, 0))
+        rotate_view(context, right_axis, -1)
+        return {'FINISHED'}
 # PANEL UI (PART 1 DRAW)
 ####################################################
 
@@ -2761,10 +2869,14 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
             elif context.active_object['Top'] == True:
 
                 if 'top_object_block' in context.scene: 
-                    actual_obj=context.scene['top_object_block'].name 
+                    actual_obj=context.scene['top_object_block'].name                     
+                    actual_collection= context.scene['top_object_block'].users_collection[0].name
                 else:
                     actual_obj=context.active_object.name
-                #create simple row
+                    actual_collection= context.active_object.users_collection[0].name
+                #create simple rows
+                row01 = layout.row()
+                row01.label(text = f"Part: {actual_collection}")
                 row01 = layout.row()
                 row01.label(text = f"Object : { actual_obj }")
 
@@ -2775,7 +2887,10 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
 
                 #create simple row
                 row02 = layout.row()
-                row02.label(text = f"Positioning Part: {context.active_object.name}")       
+                row02.alert = True
+                row02.label(text = f"Group Part: {context.active_object.users_collection[0].name}")
+                row02 = layout.row()
+                row02.label(text = f"Group Object: {context.active_object.name}") 
 
                 if "top_object_block" in context.scene:
                     # add button custom
@@ -2783,6 +2898,9 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
                     row02.scale_y = 2
                     row02.operator("object.button_custom07", text= "Before Part", icon = "BACK")
 
+                    
+                    row02.scale_y = 1
+                    row02.operator("object.button_custom0705", text= "EXRA CUT")
                     # add button custom 
                     row02.scale_y = 2
                     row02.operator("object.button_custom08", text= "Next Part", icon = "FORWARD")
@@ -2837,6 +2955,20 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
             row02 = layout.row()
             row02.scale_y = 2
             row02.operator("object.button_custom14", text= "Cut")
+                        # Control deslizante de sensibilidad en grados
+        layout.label(text="VISTA DE LA CAMARA")
+        layout.prop(context.scene, "view_rotation_sensitivity", text="")
+
+        # Botones de giro de vista
+        row02 = layout.row()
+        row02.operator("view3d.rotate_view_up", text="Rotate Up")
+        
+        row02 = layout.row(align=True)
+        row02.operator("view3d.rotate_view_left", text="Rotate Left")
+        row02.operator("view3d.rotate_view_right", text="Rotate Right")
+        
+        row02 = layout.row()
+        row02.operator("view3d.rotate_view_down", text="Rotate Down") 
 
 # REGISTER (PART 2)
 ####################################################
@@ -2860,6 +2992,7 @@ def register():
     bpy.utils.register_class(BUTTOM_CUSTOM05)
     bpy.utils.register_class(BUTTOM_CUSTOM06)
     bpy.utils.register_class(BUTTOM_CUSTOM07)
+    bpy.utils.register_class(BUTTOM_CUSTOM0705)
     bpy.utils.register_class(BUTTOM_CUSTOM08)
     bpy.utils.register_class(BUTTOM_CUSTOM09)
     bpy.utils.register_class(BUTTOM_CUSTOM10)
@@ -2867,6 +3000,20 @@ def register():
     bpy.utils.register_class(BUTTOM_CUSTOM12)
     bpy.utils.register_class(BUTTOM_CUSTOM13)
     bpy.utils.register_class(BUTTOM_CUSTOM14)
+    bpy.utils.register_class(RotateViewLeft)
+    bpy.utils.register_class(RotateViewRight)
+    bpy.utils.register_class(RotateViewUp)
+    bpy.utils.register_class(RotateViewDown)
+    
+    # Agregar propiedad de sensibilidad a la escena
+    bpy.types.Scene.view_rotation_sensitivity = bpy.props.FloatProperty(
+        name="Sensitivity",
+        description="Adjust view rotation sensitivity (degrees)",
+        default=15.0,
+        min=1.0,
+        max=90.0,
+        update=update_sensitivity
+    )
 
 def unregister():
     bpy.utils.unregister_class(PANEL_CUSTOM_UI_00)
@@ -2888,6 +3035,7 @@ def unregister():
     bpy.utils.unregister_class(BUTTOM_CUSTOM05)
     bpy.utils.unregister_class(BUTTOM_CUSTOM06)
     bpy.utils.unregister_class(BUTTOM_CUSTOM07)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM0705)
     bpy.utils.unregister_class(BUTTOM_CUSTOM08)
     bpy.utils.unregister_class(BUTTOM_CUSTOM09)
     bpy.utils.unregister_class(BUTTOM_CUSTOM10)
@@ -2895,6 +3043,20 @@ def unregister():
     bpy.utils.unregister_class(BUTTOM_CUSTOM12)
     bpy.utils.unregister_class(BUTTOM_CUSTOM13)
     bpy.utils.unregister_class(BUTTOM_CUSTOM14)
+    bpy.utils.register_class(RotateViewLeft)
+    bpy.utils.register_class(RotateViewRight)
+    bpy.utils.register_class(RotateViewUp)
+    bpy.utils.register_class(RotateViewDown)
+    
+    # Agregar propiedad de sensibilidad a la escena
+    bpy.types.Scene.view_rotation_sensitivity = bpy.props.FloatProperty(
+        name="Sensitivity",
+        description="Adjust view rotation sensitivity (degrees)",
+        default=15.0,
+        min=1.0,
+        max=90.0,
+        update=update_sensitivity
+    )
 
 if __name__ == "__main__":
     register()

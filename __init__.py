@@ -15,6 +15,7 @@ bl_info = {
 print("----------Instalado-----------")
 import bpy
 from . import funcs
+from .state import GlobalState, register as register_state
 #funcs = bpy.data.texts["funcs.py"].as_module()
 
 # BUTTON CUSTOM (OPERATOR)
@@ -57,6 +58,7 @@ class PANEL_CUSTOM_UI(bpy.types.Panel):
 # REGISTER (PART 2)
 ####################################################
 def register():
+    register_state()
     bpy.utils.register_class(PANEL_CUSTOM_UI)
     bpy.utils.register_class(BUTTOM_CUSTOM)
 
