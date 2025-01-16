@@ -42,8 +42,11 @@ class funcs():
     cut_thickness_y = 0.06
     cut_thickness_z = 0.002
 
-    wood_total_heigh = 0.042 + 8/1000
-    wood_total_width = 0.141 + 8/1000
+    margin = 0.01 #magen alrededor de la madera para la espuma liquida.
+    variable_size = 8/1000 #suma 8mm, 4mm por lado por la variabilidad del tamaño de la madera
+
+    wood_total_heigh = 0.042 + variable_size
+    wood_total_width = 0.141 + variable_size
     wood_total_depth = 4.347
 
     volume_total_irregular = 0
@@ -71,7 +74,19 @@ class funcs():
         context.scene.my_text_settings.my_text_property_y = ""
         context.scene.my_text_settings.my_text_property_z = ""
 
-        print(f"Valores introducidos: X={x}, Y={y}, Z={z}")
+        print(f"Valores introducidos bloques: X={x}, Y={y}, Z={z}")
+
+    def set_size_wood(self,context, x, y, z):
+        # Actualiza los valores introducidos por el usuario
+        self.wood_total_depth = float(z)
+        self.wood_total_width = float(y)
+        self.wood_total_heigh = float(x)
+
+        context.scene.my_text_settings.my_text_property_x = ""
+        context.scene.my_text_settings.my_text_property_y = ""
+        context.scene.my_text_settings.my_text_property_z = ""
+
+        print(f"Valores introducidos maderas: X={x}, Y={y}, Z={z}")
 
     def change_origin (self):
         #print(f"-------change_origin>{dir}")
@@ -376,13 +391,13 @@ class funcs():
 
         return AreaCNC
 
-    def create_woods (self, dimensions_X,dimensions_Y, dimensions_Z, separation_z, separation_x, separation_y,  plane_thickness_x,  plane_thickness_y, scale = 1):
+    def create_woods (self, context, dimensions_X,dimensions_Y, dimensions_Z, separation_z, separation_x, separation_y,  plane_thickness_x,  plane_thickness_y, scale = 1):
 
         plane_size_high = (separation_z+0.5)
 
-        wood_heigh = self.wood_total_heigh
-        wood_width = self.wood_total_width
-        wood_depth = self.wood_total_depth
+        wood_heigh = context.scene.my_number_settings.my_number_property_wood_x
+        wood_width = context.scene.my_number_settings.my_number_property_wood_y
+        wood_depth = context.scene.my_number_settings.my_number_property_wood_z
 
         faces_count_x = math.ceil(dimensions_X/separation_x)
         faces_count_y = math.ceil(dimensions_Y/separation_y)
@@ -444,6 +459,11 @@ class funcs():
     def crate_around_object (self, context, scale = 1):
         #print(f"-------crate_around_object>{dir}")
         # store the location of current 3d cursor
+        wood_x = context.scene.my_number_settings.my_number_property_wood_x
+        separation_x = self.cut_thickness_x
+
+        separation_y = wood_x + self.margin #
+        self.cut_thickness_y = separation_y
         saved_location = bpy.context.scene.cursor.location.xyz   # returns a vector
             
 
@@ -451,15 +471,16 @@ class funcs():
         y_value = context.scene.my_number_settings.my_number_property_foam_block_y
         z_value = context.scene.my_number_settings.my_number_property_foam_block_z
 
-        foam_block_hight_x = x_value + self.cut_thickness_x
-        foam_block_hight_y = y_value + self.cut_thickness_y
+        foam_block_hight_x = x_value + separation_x
+        foam_block_hight_y = y_value + separation_y
         foam_block_hight_z = z_value
 
         print(f"from context foam_block_hight_x:{foam_block_hight_x} foam_block_hight_y:{foam_block_hight_y} foam_block_hight_z:{foam_block_hight_z}")
         print(f"from self foam_block_hight_x:{self.foam_block_x} foam_block_hight_y:{self.foam_block_y} foam_block_hight_z:{self.foam_block_z}")
 
-        separation_x = self.cut_thickness_x
-        separation_y = self.cut_thickness_y
+        #separation_x = self.cut_thickness_x
+        #separation_y = self.cut_thickness_y
+
         # get object
         selected_object = bpy.context.active_object
         # get object dimensions
@@ -470,8 +491,10 @@ class funcs():
         dimensions_Y = round(dimensions.y,1)
         dimensions_Z = round(dimensions.z,1)   
 
+        
+
         self.create_cutter_planes(dimensions_X,dimensions_Y,dimensions_Z,foam_block_hight_z,foam_block_hight_x,foam_block_hight_y,separation_x,separation_y, scale = 1) 
-        self.create_woods(dimensions_X,dimensions_Y,dimensions_Z,foam_block_hight_z,foam_block_hight_x,foam_block_hight_y, separation_x,separation_y, scale = 1)
+        self.create_woods(context, dimensions_X,dimensions_Y,dimensions_Z,foam_block_hight_z,foam_block_hight_x,foam_block_hight_y, separation_x,separation_y, scale = 1)
 
         bpy.ops.object.select_all(action='DESELECT')
 
@@ -1883,12 +1906,28 @@ class funcs():
         elif context.scene['top_object_block'] != context.active_object:    
             self.main_top_object_blocked.hide_select = False       
             context.active_object.location = context.scene['save_location']
-            context.active_object.rotation_euler = [0, 0, 0]            
-            context.active_object.users_collection[0].hide_viewport = True
-            bpy.context.view_layer.objects.active = context.scene['top_object_block']
-            del context.scene['top_object_block']
+            context.active_object.rotation_euler = [0, 0, 0]        
+            print("COLECCION ACTUAL"+context.active_object.users_collection[0].name)
 
+            for object in context.active_object.users_collection[0].objects:
+                        if object.name.startswith('areaCNC.'):
+                            object.hide_viewport = False
+                        if object.name.startswith('foamBlock.'):
+                            object.hide_viewport = False
+            
+            context.active_object.users_collection[0].hide_viewport = True
+            context.view_layer.objects.active = context.scene['top_object_block']
+            del context.scene['top_object_block']        
+
+    def block_base_top_part_finish(self, context):        
+
+        self.block_base_top_part(context)
         self.isolate_part_collection(context)
+        context.active_object['finish']=True
+        context.active_object.users_collection[0].hide_viewport = True
+
+        
+        # Hide Current Collection
 
     def isolate_part_collection(self, context):
 
@@ -1902,9 +1941,8 @@ class funcs():
         for collection in all_collections:
             if collection.name != active_obj.users_collection[0].name:
                 collection.hide_viewport = not collection.hide_viewport
-                '''for objeto in collection.objects:
-                    if 'group' in objeto and objeto['group'] != active_obj['group']:  
-                        print(f"ACTUAL OBJECT GROUP {active_obj.name}-{active_obj['group']} check to {objeto.name} gruop {objeto['group']}")                      
+                for objeto in collection.objects:
+                    if 'finish' in objeto and objeto['finish'] == True:
                         collection.hide_viewport = not collection.hide_viewport
                         #break'''
 
@@ -2235,8 +2273,14 @@ class INPUT_NUMBER_01(bpy.types.PropertyGroup):
     my_number_property_foam_block_z: bpy.props.FloatProperty(
         name="foam_block_z", default=1.180, description="Valor Z para el bloque de Foam")
     
-    my_number_property_cut_thickness: bpy.props.FloatProperty(
-        name="cut_thickness", default=1.180, description="Valor X para el bloque de Foam")
+    my_number_property_wood_x: bpy.props.FloatProperty(
+        name="wood_x", default=(0.042+0.008), description="Valor X para el bloque de Wood")
+    
+    my_number_property_wood_y: bpy.props.FloatProperty(
+        name="wood_y", default=(0.141+0.008), description="Valor Y para el bloque de Wood")
+    
+    my_number_property_wood_z: bpy.props.FloatProperty(
+        name="wood_z", default=4.347, description="Valor Z para el bloque de Wood")
 
     my_number_property_volume_total_irregular: bpy.props.FloatProperty(
         name="volume_total_irregular", default=0, description="Volumen total de la superficie irregular")
@@ -2295,6 +2339,30 @@ class BUTTOM_SET_FOAM_SIZE(bpy.types.Operator):
         print(f"Valores introducidos: X={x_value}, Y={y_value}, Z={z_value}")
         print(f"Valores Recuperados: X={func.foam_block_x}, Y={func.foam_block_y}, Z={func.foam_block_z}")
         return {'FINISHED'}
+    
+class BUTTOM_SET_WOOD_SIZE(bpy.types.Operator):
+    bl_label = "BUTTOM_SET_WOOD_SIZE"
+    bl_idname = "object.button_buttom_set_wood_size"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+
+        x_value = float(context.scene.my_text_settings.my_text_property_x)
+        y_value = float(context.scene.my_text_settings.my_text_property_y)
+        z_value = float(context.scene.my_text_settings.my_text_property_z)
+
+        context.scene.my_number_settings.my_number_property_wood_x = x_value
+        context.scene.my_number_settings.my_number_property_wood_y = y_value
+        context.scene.my_number_settings.my_number_property_wood_z = z_value
+
+        #func = myFunc
+        func = funcs()
+
+        func.set_size_wood(context, x_value, y_value, z_value)
+
+        print(f"Valores introducidos wood: X={x_value}, Y={y_value}, Z={z_value}")
+        print(f"Valores Recuperados wood: X={func.wood_total_heigh}, Y={func.wood_total_width}, Z={func.wood_total_depth}")
+        return {'FINISHED'}
 
 class BUTTOM_SET_FOAM_DEFAULT(bpy.types.Operator):
     bl_label = "BUTTOM_SET_FOAM_DEFAULT"
@@ -2315,10 +2383,36 @@ class BUTTOM_SET_FOAM_DEFAULT(bpy.types.Operator):
         context.scene.my_number_settings.my_number_property_foam_block_z = z_value
         
         func.set_size_block(context, x_value, y_value, z_value)
-        print(f"Valores introducidos: X={x_value}, Y={y_value}, Z={z_value}")
-        print(f"Valores Recuperados: X={func.foam_block_x}, Y={func.foam_block_y}, Z={func.foam_block_z}")
+        print(f"Valores introducidos foam: X={x_value}, Y={y_value}, Z={z_value}")
+        print(f"Valores Recuperados foam: X={func.foam_block_x}, Y={func.foam_block_y}, Z={func.foam_block_z}")
         return {'FINISHED'}
 
+class BUTTOM_SET_WOOD_DEFAULT(bpy.types.Operator):
+    bl_label = "BUTTOM_SET_WOOD_DEFAULT"
+    bl_idname = "object.button_buttom_set_wood_default"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+
+        #func = myFunc
+        func = funcs()
+        
+        x_value = round(func.wood_total_heigh, 2) 
+        y_value = round(func.wood_total_width, 2) 
+        z_value = round(func.wood_total_depth, 2)
+
+        context.scene.my_number_settings.my_number_property_wood_x = x_value
+        context.scene.my_number_settings.my_number_property_wood_y = y_value
+        context.scene.my_number_settings.my_number_property_wood_z = z_value
+    
+        func.set_size_wood(context, x_value, y_value, z_value)
+
+        print(f"Valores introducidos wood: X={x_value}, Y={y_value}, Z={z_value}")
+        print(f"Valores Recuperados wood: X={func.wood_total_heigh}, Y={func.wood_total_width}, Z={func.wood_total_depth}")
+        return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_buttom_set_wood_default"
 
 class BUTTOM_CUSTOM01(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM01_Prepare"
@@ -2327,14 +2421,17 @@ class BUTTOM_CUSTOM01(bpy.types.Operator):
 
     def execute(self, context):
         #func = myFunc
-        func = funcs()
+        global funcion
+        if funcion is None:
+            funcion = funcs()
+        
 
         x_value = context.scene.my_number_settings.my_number_property_foam_block_x
         y_value = context.scene.my_number_settings.my_number_property_foam_block_y
         z_value = context.scene.my_number_settings.my_number_property_foam_block_z
 
         print(f"Valores Recuperados BTN01: X={x_value}, Y={y_value}, Z={z_value}")
-        func.crate_around_object(context)
+        funcion.crate_around_object(context)
         
         print("execute button01 ---custom ok!")
 
@@ -2351,8 +2448,10 @@ class BUTTOM_CUSTOM02(bpy.types.Operator):
     def execute(self, context):
         
         #func = myFunc
-        func = funcs()
-        func.cut_and_order_parts(context)
+        global funcion
+        if funcion is None:
+            funcion = funcs()
+        funcion.cut_and_order_parts(context)
         
         print("execute button02 custom ok!")
 
@@ -2451,14 +2550,33 @@ class BUTTOM_CUSTOM06(bpy.types.Operator):
         if funcion is None:
             funcion = funcs()
         funcion.block_base_top_part(context)
-
+        funcion.isolate_part_collection(context)
         print("execute button06 custom ok!")
 
         return {'FINISHED'}
     @classmethod
     def description(cls, context, properties):
         return "object.button_custom06"  
+    
+class BUTTOM_CUSTOM0605(bpy.types.Operator):
+    bl_label = "BUTTOM_CUSTOM0605_CutFoam"
+    bl_idname = "object.button_custom0605"
+    bl_options = {'UNDO'}
 
+    def execute(self, context):
+        
+        global funcion
+        if funcion is None:
+            funcion = funcs()
+        funcion.block_base_top_part_finish(context)
+
+        print("execute button0605 custom ok!")
+
+        return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom0605" 
+    
 class BUTTOM_CUSTOM07(bpy.types.Operator):
     bl_label = "BUTTOM_CUSTOM07_CutFoam"
     bl_idname = "object.button_custom07"
@@ -2723,9 +2841,13 @@ class PANEL_CUSTOM_UI_01(bpy.types.Panel):
         #func = myFunc
         func = funcs()
 
-        x = round(context.scene.my_number_settings.my_number_property_foam_block_x,2)
-        y = round(context.scene.my_number_settings.my_number_property_foam_block_y,2)
-        z = round(context.scene.my_number_settings.my_number_property_foam_block_z,2)
+        foam_x = round(context.scene.my_number_settings.my_number_property_foam_block_x,2)
+        foam_y = round(context.scene.my_number_settings.my_number_property_foam_block_y,2)
+        foam_z = round(context.scene.my_number_settings.my_number_property_foam_block_z,2)
+
+        wood_x = round(context.scene.my_number_settings.my_number_property_wood_x,2)
+        wood_y = round(context.scene.my_number_settings.my_number_property_wood_y,2)
+        wood_z = round(context.scene.my_number_settings.my_number_property_wood_z,2)
 
         vol_total_irreg= round(context.scene.my_number_settings.my_number_property_volume_total_irregular,2)
         vol_total_cube= round(context.scene.my_number_settings.my_number_property_volume_total_cubes,2)
@@ -2739,7 +2861,11 @@ class PANEL_CUSTOM_UI_01(bpy.types.Panel):
         row = layout.row()
         row.label(text=f"Cube Size:")
         row = layout.row()
-        row.label(text=f"X={x}, Y={y}, Z={z}")
+        row.label(text=f"X={foam_x}, Y={foam_y}, Z={foam_z}")
+        row = layout.row()
+        row.label(text=f"Wood Size + margin X Y (8mm recomended):")
+        row = layout.row()
+        row.label(text=f"X={wood_x}, Y={wood_y}, Z={wood_z}")
 
         # add text input for X
         row = layout.row()
@@ -2755,11 +2881,13 @@ class PANEL_CUSTOM_UI_01(bpy.types.Panel):
 
         # add button custom
         row = layout.row()
-        row.operator(BUTTOM_SET_FOAM_SIZE.bl_idname, text="Set Size")
+        row.operator(BUTTOM_SET_FOAM_SIZE.bl_idname, text="Set Size BLOCK")
+        row.operator(BUTTOM_SET_WOOD_SIZE.bl_idname, text="Set Size WOOD")
 
         # add button custom
         row = layout.row()
-        row.operator(BUTTOM_SET_FOAM_DEFAULT.bl_idname, text="Default Size")
+        row.operator(BUTTOM_SET_FOAM_DEFAULT.bl_idname, text="Default Block")
+        row.operator(BUTTOM_SET_WOOD_DEFAULT.bl_idname, text="Default Wood")
 
         #create simple row
         row01 = layout.row()
@@ -2777,11 +2905,11 @@ class PANEL_CUSTOM_UI_01(bpy.types.Panel):
         # add button custom
         row02 = layout.row()
         row02.scale_y = 2
-        row02.operator("object.button_custom02", text= "Prepare Cuts in CNC Hot Wire", icon = "IMGDISPLAY")
+        row02.operator(BUTTOM_CUSTOM02.bl_idname, text= "Prepare Cuts in CNC Hot Wire", icon = "IMGDISPLAY")
 
         #create simple row
         row02 = layout.row()
-        row02.label(text = f"-------------------VOLUMENES----------------------")
+        row02.label(text = f"---VOLUMENES---")
 
         #create simple row
         row02 = layout.row()
@@ -2941,6 +3069,14 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
                         row02.scale_y = 2
                         row02.operator("object.button_custom13", text= "Group")
 
+                    #create simple row
+                    row02 = layout.row()
+                    row02.label(text = "FINISH Step")
+                    
+                    # add button custom
+                    row02 = layout.row()
+                    row02.scale_y = 1
+                    row02.operator("object.button_custom0605", text= "FINISH")
             else:
                         #create simple row
                         row02 = layout.row()
@@ -2955,7 +3091,7 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
             row02 = layout.row()
             row02.scale_y = 2
             row02.operator("object.button_custom14", text= "Cut")
-                        # Control deslizante de sensibilidad en grados
+
         layout.label(text="VISTA DE LA CAMARA")
         layout.prop(context.scene, "view_rotation_sensitivity", text="")
 
@@ -2984,13 +3120,16 @@ def register():
     bpy.utils.register_class(BUTTOM_SET_AREA)
     bpy.utils.register_class(BUTTOM_GET_AREA)
     bpy.utils.register_class(BUTTOM_SET_FOAM_SIZE)
+    bpy.utils.register_class(BUTTOM_SET_WOOD_SIZE)
     bpy.utils.register_class(BUTTOM_SET_FOAM_DEFAULT)
+    bpy.utils.register_class(BUTTOM_SET_WOOD_DEFAULT)
     bpy.utils.register_class(BUTTOM_CUSTOM01)
     bpy.utils.register_class(BUTTOM_CUSTOM02)
     bpy.utils.register_class(BUTTOM_CUSTOM03)
     bpy.utils.register_class(BUTTOM_CUSTOM04)
     bpy.utils.register_class(BUTTOM_CUSTOM05)
     bpy.utils.register_class(BUTTOM_CUSTOM06)
+    bpy.utils.register_class(BUTTOM_CUSTOM0605)
     bpy.utils.register_class(BUTTOM_CUSTOM07)
     bpy.utils.register_class(BUTTOM_CUSTOM0705)
     bpy.utils.register_class(BUTTOM_CUSTOM08)
@@ -3027,13 +3166,16 @@ def unregister():
     bpy.utils.unregister_class(BUTTOM_SET_AREA)
     bpy.utils.unregister_class(BUTTOM_GET_AREA)
     bpy.utils.unregister_class(BUTTOM_SET_FOAM_SIZE)
+    bpy.utils.unregister_class(BUTTOM_SET_WOOD_SIZE)
     bpy.utils.unregister_class(BUTTOM_SET_FOAM_DEFAULT)
+    bpy.utils.unregister_class(BUTTOM_SET_WOOD_DEFAULT)
     bpy.utils.unregister_class(BUTTOM_CUSTOM01)
     bpy.utils.unregister_class(BUTTOM_CUSTOM02)
     bpy.utils.unregister_class(BUTTOM_CUSTOM03)
     bpy.utils.unregister_class(BUTTOM_CUSTOM04)
     bpy.utils.unregister_class(BUTTOM_CUSTOM05)
     bpy.utils.unregister_class(BUTTOM_CUSTOM06)
+    bpy.utils.unregister_class(BUTTOM_CUSTOM0605)
     bpy.utils.unregister_class(BUTTOM_CUSTOM07)
     bpy.utils.unregister_class(BUTTOM_CUSTOM0705)
     bpy.utils.unregister_class(BUTTOM_CUSTOM08)
