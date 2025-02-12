@@ -27,7 +27,7 @@ import mathutils
 # Importaciones locales (si las hubiera)
 # from . import funciones  # Descomentar si se utilizan funciones de otros módulos
 
-funcion = None
+func = None
 #Funciones
 class funcs():
 
@@ -580,6 +580,8 @@ class funcs():
 
     def cut_and_order_parts(self, context):
         print('******inner_part_verif***********')
+        
+        self.write_to_file_block_base_cut(context)
         #save state in case of error
         bpy.ops.ed.undo_push(message="inner_part_verif Function")
         #try:
@@ -766,6 +768,50 @@ class funcs():
             # UnDo in case of error
             #bpy.ops.ed.undo()
     
+    def write_to_file_block_base_cut(self, context):
+        
+        foam_block_x = self.foam_block_x*1000
+        foam_block_y = self.foam_block_y*1000
+        foam_block_z = self.foam_block_z*1000
+        dist_X_center = self.dist_X_center*1000
+
+
+        front_x = dist_X_center - (foam_block_x/2)
+        back_x = dist_X_center + (foam_block_x/2)
+        left_y = dist_X_center - (foam_block_y/2)
+        right_y = dist_X_center + (foam_block_y/2)
+
+        scale=1000
+        i=0
+        pathFileName=".\\PARTES\\BaseCleanBlock"
+            
+        pathFileNumber=pathFileName+".nc"
+        #create .nc file 
+        try:
+            os.makedirs(".\\PARTES\\", exist_ok=True)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
+
+        f = open(pathFileNumber,"w+")
+        f.write(f'(GCODE_from_Blender)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
+        
+        #direction will be from +X  to -X
+      
+        f.write(f"G01X{front_x}Y{0}A{0}\n") 
+        f.write(f"G01X{front_x}Y{foam_block_z}A{0}\n")
+        f.write(f"G01X{back_x}Y{foam_block_z}A{0}\n")
+        f.write(f"G01X{back_x}Y{0}A{0}\n")
+        f.write(f"G01X{2150}Y{0}A{0}\n")
+        f.write(f"G01X{2150}Y{0}A{90}\n")
+        f.write(f"G01X{right_y}Y{0}A{90}\n")
+        f.write(f"G01X{right_y}Y{foam_block_z}A{90}\n")
+        f.write(f"G01X{left_y}Y{foam_block_z}A{90}\n")
+        f.write(f"G01X{left_y}Y{0}A{90}\n")
+        f.write(f"G01X{0}Y{0}A{90}\n")
+        f.write(f"G01X{0}Y{0}A{0}\n")
+        f.write(f'(To Origin)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
+
     def draw_init(self):
         selected_object = bpy.context.active_object
         self.select_before = selected_object
@@ -1829,7 +1875,7 @@ class funcs():
     def get_total_area_vol(self, mesh = None):
         if mesh is None and bpy.context.active_object.select_get():
             mesh = bpy.context.active_object
-            print(mesh.data.name)
+            #print(mesh.data.name)
             copy_obj = mesh.copy()
             copy_obj.data = mesh.data.copy()
             bpy.context.collection.objects.link(copy_obj)
@@ -2244,6 +2290,222 @@ class funcs():
                     
                     break        
 
+    def get_volume(self, mesh = None):
+        if mesh.type == 'MESH':
+            # Crear una copia temporal del objeto para no modificar el original
+            obj_copy = mesh.copy()
+            obj_copy.data = mesh.data.copy()
+            
+            # Aplicar todas las transformaciones para asegurar un cálculo preciso
+            obj_copy.matrix_world = mathutils.Matrix.Identity(4)
+            
+            # Crear un BMesh desde la malla
+            bm = bmesh.new()
+            bm.from_mesh(obj_copy.data)
+            
+            # Triangular las caras para mayor precisión
+            bmesh.ops.triangulate(bm, faces=bm.faces)
+            
+            # Calcular el volumen usando BMesh
+            volume = bm.calc_volume()
+            
+            # Limpiar
+            bm.free()
+            bpy.data.objects.remove(obj_copy, do_unlink=True)
+            
+            return volume
+        else:
+            return 0
+
+    def get_wood_vol(self, context):
+        obj_base = context.active_object
+        wood01 = bpy.data.objects['innerWood_x.001']
+        wood02 = bpy.data.objects['innerWood_y.001']
+        
+        for obj in [obj_base, wood01, wood02]:
+            for mod in obj.modifiers:
+                bpy.context.view_layer.objects.active = obj
+                bpy.ops.object.modifier_apply(modifier=mod.name)
+
+        # Create a copy of the base object
+        obj_base_copy = obj_base.copy()
+        obj_base_copy.data = obj_base.data.copy()
+        # Link the copy to the scene before using it
+        context.collection.objects.link(obj_base_copy)
+        
+        # Add boolean modifier for wood01
+        bool_mod = obj_base_copy.modifiers.new("Boolean", 'BOOLEAN')
+        bool_mod.operation = 'INTERSECT'
+        bool_mod.solver = 'FAST'
+        bool_mod.object = wood01
+        
+        # Set active and apply modifier
+        context.view_layer.objects.active = obj_base_copy
+        bpy.ops.object.modifier_apply(modifier=bool_mod.name)
+        
+        # Calculate volume of first intersection
+        volume_wood01 = self.get_volume(obj_base_copy)
+        # Remove first copy
+        bpy.data.objects.remove(obj_base_copy, do_unlink=True)
+
+        # Create another copy for second intersection
+        obj_base_copy = obj_base.copy()
+        obj_base_copy.data = obj_base.data.copy()
+        context.collection.objects.link(obj_base_copy)
+        
+        # Add boolean modifier for wood02
+        bool_mod = obj_base_copy.modifiers.new("Boolean", 'BOOLEAN')
+        bool_mod.operation = 'INTERSECT'
+        bool_mod.solver = 'FAST'
+        bool_mod.object = wood02
+        
+        # Set active and apply modifier
+        context.view_layer.objects.active = obj_base_copy
+        bpy.ops.object.modifier_apply(modifier=bool_mod.name)
+        
+        # Calculate volume of second intersection
+        volume_wood02 = self.get_volume(obj_base_copy)
+        # Remove second copy
+        bpy.data.objects.remove(obj_base_copy, do_unlink=True)
+
+        # Calculate total volume
+        volume = float(volume_wood01) + float(volume_wood02)
+        
+        # Reset active object
+        context.view_layer.objects.active = obj_base
+        
+        return volume
+
+    def get_wood_weight(self, context):
+        density_wood = context.scene.my_number_settings.density_wood #kg/m3
+        #density_wood = 450
+        wood_vol = self.get_wood_vol(context)
+        self.wood_vol = wood_vol
+
+        weight_wood = density_wood * wood_vol
+        return weight_wood, wood_vol
+
+    def get_foam_weight(self, context):
+        density_foam = context.scene.my_number_settings.density_foam #kg/m3
+        #density_foam = 30
+        foam_vol = self.get_volume(context.active_object) - self.wood_vol
+        weight_foam = density_foam * foam_vol
+        return weight_foam, foam_vol
+
+    def get_fiber_weight(self, context):
+        area_foam = self.get_total_area_vol()[0]
+        height_fiber = 0.005 #meters
+        vol_fiber = area_foam * height_fiber #m2
+        density_fiber = context.scene.my_number_settings.density_fiber #kg/m3
+        #density_fiber = 200
+        weight_fiber = vol_fiber * density_fiber
+        return weight_fiber 
+
+    def get_grass_area(self, context):
+        object = context.active_object
+        # Obtener las dimensiones y la ubicación del objeto activo
+        obj_dim = object.dimensions
+        obj_location_save = object.location.copy()
+        # Cambiar el origen del objeto a su centro de masa
+        bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS', center='BOUNDS')
+
+        obj_location = object.location.copy()
+
+        # Setear el nuevo origen en las coordenadas de obj_location_save
+        bpy.context.scene.cursor.location = obj_location_save
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')
+
+        # Calcular las dimensiones del plano aumentadas en 20% en X y Y (el plano debe ser algo mas grande para que pueda contener al objeto).
+        plane_dim_x = obj_dim.x * 1.2
+        plane_dim_y = obj_dim.y * 1.2
+        # Calcular la altura del plano como 10 veces la altura del objeto (el plano debe estar realtivamente alto para poder hacer una proyeccion correcta)
+        plane_dim_z = obj_dim.z * 10
+        # Crear el plano en el centro del objeto
+        bpy.ops.mesh.primitive_plane_add(size=1, location=(obj_location.x, obj_location.y, obj_location.z + plane_dim_z/2))
+        plane = context.active_object
+        # Ajustar las dimensiones del plano
+        plane.dimensions = (plane_dim_x, plane_dim_y, plane_dim_z)
+
+        # Añadir un modificador Remesh al plano activo
+        remesh_modifier = plane.modifiers.new(name="Remesh", type='REMESH')
+        remesh_modifier.voxel_size = 0.01
+        shrinkwrap_modifier = plane.modifiers.new(name="Shrinkwrap", type='SHRINKWRAP')
+        shrinkwrap_modifier.target = object
+        shrinkwrap_modifier.offset = 0.01
+        shrinkwrap_modifier.wrap_method = 'PROJECT'
+
+        # Crear otro plano igual al que ya tenemos, sin modificadores, en la misma posición pero en Z debe estar 2 veces la altura de object
+        bpy.ops.mesh.primitive_plane_add(size=1, location=(obj_location.x, obj_location.y, obj_location.z + obj_dim.z * 2))
+        second_plano = context.active_object
+        # Ajustar las dimensiones del segundo plano
+        second_plano.dimensions = (plane_dim_x, plane_dim_y, plane_dim_z)
+
+        # Añadir un modificador booleano al segundo plano
+        boolean_modifier = second_plano.modifiers.new(name="Boolean", type='BOOLEAN')
+        boolean_modifier.operation = 'INTERSECT'
+        boolean_modifier.solver = 'FAST'
+        boolean_modifier.object = plane
+        # Aplicar el modificador booleano al segundo plano
+        bpy.ops.object.modifier_apply(modifier="Boolean")
+
+        # Eliminar completamente el objeto 'plane'
+        bpy.data.objects.remove(plane, do_unlink=True)
+
+        # Aplicar las escalas al segundo plano
+        bpy.ops.object.transform_apply(scale=True)
+
+        # Crear una copia del objeto 'segundo_plano'
+        second_plano.select_set(True)
+        bpy.ops.object.duplicate()
+        copy_second_plano = context.active_object
+
+        # Entrar en modo de edición del segundo plano
+        bpy.ops.object.editmode_toggle()
+
+        # Triangulación de las caras del plano
+        bpy.ops.mesh.select_all(action='SELECT')
+        #bpy.ops.mesh.quads_convert_to_tris()
+
+        #----------------------------------------------------
+
+        # Inset del plano de 0.04 (esto es el grosor estimado de la roca)
+        bpy.ops.mesh.inset(thickness=0.4)
+
+        # Eliminar solo la cara seleccionada con 'delete only faces'
+        bpy.ops.mesh.delete(type='FACE')
+
+        # Salir del modo de edición
+        bpy.ops.object.editmode_toggle()
+
+        area_rock = self.get_total_area_vol()[0]
+
+        # Hacer que copia_segundo_plano sea el objeto activo
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.view_layer.objects.active = second_plano
+        second_plano.select_set(True)
+
+        area_top = self.get_total_area_vol()[0]
+        self.area_top = area_top
+        area_grass = area_top - area_rock
+        print(f"area de la roca: {area_rock}")
+        print(f"area total de la vista superior: {area_top}")
+        print(f"area de la tierra: {area_grass}")
+
+        # Eliminar completamente el objeto 'segundo_plano'
+        bpy.data.objects.remove(second_plano, do_unlink=True)
+        # Eliminar completamente el objeto 'copia_segundo_plano'
+        bpy.data.objects.remove(copy_second_plano, do_unlink=True)
+
+        return area_grass
+
+    def get_grass_weight(self, context):
+        area_grass = self.get_grass_area(context)
+        high_grass = 0.1 #meters
+        grass_density = context.scene.my_number_settings.density_grass #kg/m3
+        #grass_density = 100
+        weight_grass = area_grass * high_grass * grass_density
+
+        return weight_grass, area_grass
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
@@ -2291,6 +2553,53 @@ class INPUT_NUMBER_01(bpy.types.PropertyGroup):
     my_number_property_quantity_cubes: bpy.props.FloatProperty(
         name="quantity_cubes", default=0, description="Cantidad de bloques Foam usados aproximadamente")
     
+    foam_weight: bpy.props.FloatProperty(
+        name="foam weight", default=0, description="peso del plumavid")
+    
+    wood_weight: bpy.props.FloatProperty(
+        name="foam weight", default=0, description="peso de la madera")
+    
+    fiber_weight: bpy.props.FloatProperty(
+        name="foam weight", default=0, description="peso del fibra de vidrio")
+    
+    grass_weight: bpy.props.FloatProperty(
+        name="foam weight", default=0, description="peso de la tierra")
+    
+    total_weight: bpy.props.FloatProperty(
+        name="total weight", default=0, description="peso de la tierra")
+    
+    wood_lenght: bpy.props.FloatProperty(
+        name="wood lenght", default=0, description="largo de la madera")
+    
+    foam_volume: bpy.props.FloatProperty(
+        name="foam volume", default=0, description="volumen del plumavid")
+    
+    area_grass: bpy.props.FloatProperty(
+        name="area grass", default=0, description="Area de la pasto")
+    
+    area_top: bpy.props.FloatProperty(
+        name="area top", default=0, description="Area total 2d")
+    
+    obj_hight: bpy.props.FloatProperty(
+        name="hight", default=0, description="Altura del modelo")
+    
+    submersion_depth: bpy.props.FloatProperty(
+        name="submersion depth", default=0, description="Altura del modelo")
+    
+    
+    
+    density_foam: bpy.props.FloatProperty(
+        name="density foam", default=30, description="Introduce Densidad en kg/m3")
+    
+    density_wood: bpy.props.FloatProperty(
+        name="density wood", default=450, description="Introduce Densidad en kg/m3")
+    
+    density_grass: bpy.props.FloatProperty(
+        name="density grass", default=1500, description="Introduce Densidad en kg/m3")
+    
+    density_fiber: bpy.props.FloatProperty(
+        name="density fiber", default=1800, description="Introduce Densidad en kg/m3")
+    
 class BUTTOM_SET_AREA(bpy.types.Operator):
     bl_label = "BUTTOM_SET_AREA"
     bl_idname = "object.button_set_area"
@@ -2314,6 +2623,62 @@ class BUTTOM_GET_AREA(bpy.types.Operator):
         
         context.scene.my_text_settings.my_text_property_area = str(round(func.get_total_area_vol()[0],2))
                
+        return {'FINISHED'}
+    
+class BUTTOM_GET_VOL(bpy.types.Operator):
+    bl_label = "BUTTOM_GET_VOL"
+    bl_idname = "object.button_get_vol"
+
+    def execute(self, context):
+        global func
+        if func is None:
+            func = funcs()
+        func = funcs()
+        
+        #context.scene.my_text_settings.my_text_property_area = str(round(func.get_volume(context.active_object),2))
+                
+        total_height = context.active_object.dimensions.z
+        wood = func.get_wood_weight(context)
+        wood_weight = wood[0]
+        wood_vol = wood[1]
+        foam = func.get_foam_weight(context)
+        foam_weight = foam[0]
+        foam_vol = foam[1]
+        fiber_weight = func.get_fiber_weight(context)
+        grass = func.get_grass_weight(context)
+        grass_weight = grass[0]
+        grass_area = grass[1]
+        wood_length = wood_vol / (func.wood_total_heigh * func.wood_total_width)
+        total_weight = foam_weight + wood_weight + fiber_weight + grass_weight
+
+        density_water = 1000 #kg/m3
+        area_top = func.area_top
+
+        submersion_depth = (total_weight/density_water)/(area_top)
+
+        print(f"SUMERGIDO -- ({total_weight}/{density_water})/({area_top}) = {submersion_depth}")
+
+        context.scene.my_number_settings.foam_weight = foam_weight
+        context.scene.my_number_settings.wood_weight = wood_weight
+        context.scene.my_number_settings.fiber_weight = fiber_weight
+        context.scene.my_number_settings.grass_weight = grass_weight
+        context.scene.my_number_settings.wood_lenght = wood_length
+        context.scene.my_number_settings.foam_volume = foam_vol
+        context.scene.my_number_settings.area_top = area_top
+        context.scene.my_number_settings.area_grass = grass_area
+        context.scene.my_number_settings.total_weight = total_weight
+        context.scene.my_number_settings.obj_hight = total_height
+        context.scene.my_number_settings.submersion_depth = submersion_depth
+
+
+
+
+        print(f"Peso espuma: {(round(foam_weight,2))}\n")
+        print(f"Peso madera: {(round(wood_weight,2))}\n")
+        print(f"Peso fibra: {(round(fiber_weight,2))}\n")
+        print(f"Peso tierra: {(round(grass_weight,2))}\n")
+        print(f"Peso Total: {(round(total_weight,2))}\n")
+
         return {'FINISHED'}
     
 class BUTTOM_SET_FOAM_SIZE(bpy.types.Operator):
@@ -2421,9 +2786,9 @@ class BUTTOM_CUSTOM01(bpy.types.Operator):
 
     def execute(self, context):
         #func = myFunc
-        global funcion
-        if funcion is None:
-            funcion = funcs()
+        global func
+        if func is None:
+            func = funcs()
         
 
         x_value = context.scene.my_number_settings.my_number_property_foam_block_x
@@ -2431,7 +2796,7 @@ class BUTTOM_CUSTOM01(bpy.types.Operator):
         z_value = context.scene.my_number_settings.my_number_property_foam_block_z
 
         print(f"Valores Recuperados BTN01: X={x_value}, Y={y_value}, Z={z_value}")
-        funcion.crate_around_object(context)
+        func.crate_around_object(context)
         
         print("execute button01 ---custom ok!")
 
@@ -2448,10 +2813,10 @@ class BUTTOM_CUSTOM02(bpy.types.Operator):
     def execute(self, context):
         
         #func = myFunc
-        global funcion
-        if funcion is None:
-            funcion = funcs()
-        funcion.cut_and_order_parts(context)
+        global func
+        if func is None:
+            func = funcs()
+        func.cut_and_order_parts(context)
         
         print("execute button02 custom ok!")
 
@@ -2546,11 +2911,11 @@ class BUTTOM_CUSTOM06(bpy.types.Operator):
 
     def execute(self, context):
         
-        global funcion
-        if funcion is None:
-            funcion = funcs()
-        funcion.block_base_top_part(context)
-        funcion.isolate_part_collection(context)
+        global func
+        if func is None:
+            func = funcs()
+        func.block_base_top_part(context)
+        func.isolate_part_collection(context)
         print("execute button06 custom ok!")
 
         return {'FINISHED'}
@@ -2565,10 +2930,10 @@ class BUTTOM_CUSTOM0605(bpy.types.Operator):
 
     def execute(self, context):
         
-        global funcion
-        if funcion is None:
-            funcion = funcs()
-        funcion.block_base_top_part_finish(context)
+        global func
+        if func is None:
+            func = funcs()
+        func.block_base_top_part_finish(context)
 
         print("execute button0605 custom ok!")
 
@@ -2582,14 +2947,14 @@ class BUTTOM_CUSTOM07(bpy.types.Operator):
     bl_idname = "object.button_custom07"
     bl_options = {'UNDO'}
 
-    global funcion
+    global func
 
     def execute(self, context):
         
-        global funcion
-        if funcion is None:
-            funcion = funcs()
-        funcion.change_select_top_part(context,-1)
+        global func
+        if func is None:
+            func = funcs()
+        func.change_select_top_part(context,-1)
         print("execute button07 custom ok!")
 
         return {'FINISHED'} 
@@ -2602,15 +2967,15 @@ class BUTTOM_CUSTOM0705(bpy.types.Operator):
     bl_idname = "object.button_custom0705"
     bl_options = {'UNDO'}
 
-    global funcion
+    global func
 
     def execute(self, context):
         
-        global funcion
-        if funcion is None:
-            funcion = funcs()
-        funcion.change_select_top_part(context,0)
-        funcion.create_cutter_plane(context)
+        global func
+        if func is None:
+            func = funcs()
+        func.change_select_top_part(context,0)
+        func.create_cutter_plane(context)
         print("execute button07.05 custom ok!")
 
         return {'FINISHED'} 
@@ -2625,10 +2990,10 @@ class BUTTOM_CUSTOM08(bpy.types.Operator):
 
     def execute(self, context):
         
-        global funcion
-        if funcion is None:
-            funcion = funcs()
-        funcion.change_select_top_part(context,1)
+        global func
+        if func is None:
+            func = funcs()
+        func.change_select_top_part(context,1)
 
         print("execute button08 custom ok!")
 
@@ -2712,10 +3077,10 @@ class BUTTOM_CUSTOM13(bpy.types.Operator):
 
     def execute(self, context):
         
-        global funcion
-        if funcion is None:
-            funcion = funcs()
-        funcion.group_top_part(context)
+        global func
+        if func is None:
+            func = funcs()
+        func.group_top_part(context)
 
         print("execute button13 custom ok!")
 
@@ -2731,10 +3096,10 @@ class BUTTOM_CUSTOM14(bpy.types.Operator):
 
     def execute(self, context):
         
-        global funcion
-        if funcion is None:
-            funcion = funcs()
-        funcion.cut_and_group_parts(context)
+        global func
+        if func is None:
+            func = funcs()
+        func.cut_and_group_parts(context)
 
         print("execute button14 custom ok!")
 
@@ -2815,9 +3180,21 @@ class PANEL_CUSTOM_UI_00(bpy.types.Panel):
         row = layout.row()
         row.label(text=f"Cambiar Area Total")
 
-        # add text input for Z
+        # add text input for Area
         row = layout.row()
         row.prop(context.scene.my_text_settings, "my_text_property_area", text="Area")
+
+        row = layout.row()
+        row.prop(context.scene.my_number_settings, "density_foam", text="Dens Poliprepileno")
+
+        row = layout.row()
+        row.prop(context.scene.my_number_settings, "density_wood", text="Dens Madera")
+
+        row = layout.row()
+        row.prop(context.scene.my_number_settings, "density_grass", text="Dens tierra")
+
+        row = layout.row()
+        row.prop(context.scene.my_number_settings, "density_fiber", text="Dens fibra")
         
         # add button custom
         row = layout.row()
@@ -2826,6 +3203,58 @@ class PANEL_CUSTOM_UI_00(bpy.types.Panel):
         # add button custom
         row = layout.row()
         row.operator(BUTTOM_GET_AREA.bl_idname, text="Get Area")
+
+        # add button custom
+        row = layout.row()
+        row.operator(BUTTOM_GET_VOL.bl_idname, text="Get Information")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"---INFO---")
+                
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Altura: {round(context.scene.my_number_settings.obj_hight,2)} m")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Area Total 2D Top: {round(context.scene.my_number_settings.area_top,2)} m2")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Area Tierra: {round(context.scene.my_number_settings.area_grass,2)} m2")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Volumen Polietileno expandido: {round(context.scene.my_number_settings.foam_volume,2)} m3")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Peso Polietileno expandido: {round(context.scene.my_number_settings.foam_weight,2)} kg")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Peso madera : {round(context.scene.my_number_settings.wood_weight,2)} kg")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"metros de  madera : {round(context.scene.my_number_settings.wood_lenght,2)} m")
+
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Peso fibra de vidrio: {round(context.scene.my_number_settings.fiber_weight,2)} kg")
+        
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Peso tierra: {round(context.scene.my_number_settings.grass_weight,2)} kg")
+        
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Peso Total: {round(context.scene.my_number_settings.total_weight,2)} kg")
+        
+        #create simple row
+        row02 = layout.row()
+        row02.label(text = f"Sumergido ~: {round(context.scene.my_number_settings.submersion_depth,2)} m")
 
 class PANEL_CUSTOM_UI_01(bpy.types.Panel):
     bl_label = "Prepare Cut Model"
@@ -3119,6 +3548,7 @@ def register():
     bpy.types.Scene.my_number_settings = bpy.props.PointerProperty(type=INPUT_NUMBER_01)
     bpy.utils.register_class(BUTTOM_SET_AREA)
     bpy.utils.register_class(BUTTOM_GET_AREA)
+    bpy.utils.register_class(BUTTOM_GET_VOL)
     bpy.utils.register_class(BUTTOM_SET_FOAM_SIZE)
     bpy.utils.register_class(BUTTOM_SET_WOOD_SIZE)
     bpy.utils.register_class(BUTTOM_SET_FOAM_DEFAULT)
@@ -3165,6 +3595,7 @@ def unregister():
     del bpy.types.Scene.my_number_settings
     bpy.utils.unregister_class(BUTTOM_SET_AREA)
     bpy.utils.unregister_class(BUTTOM_GET_AREA)
+    bpy.utils.unregister_class(BUTTOM_GET_VOL)
     bpy.utils.unregister_class(BUTTOM_SET_FOAM_SIZE)
     bpy.utils.unregister_class(BUTTOM_SET_WOOD_SIZE)
     bpy.utils.unregister_class(BUTTOM_SET_FOAM_DEFAULT)
