@@ -2394,7 +2394,8 @@ class funcs():
 
     def get_fiber_weight(self, context):
         area_foam = self.get_total_area_vol()[0]
-        height_fiber = 0.005 #meters
+        #height_fiber = 0.005 #meters
+        height_fiber = context.scene.my_number_settings.hight_fiber/1000 #mmeters
         vol_fiber = area_foam * height_fiber #m2
         density_fiber = context.scene.my_number_settings.density_fiber #kg/m3
         #density_fiber = 200
@@ -2500,7 +2501,8 @@ class funcs():
 
     def get_grass_weight(self, context):
         area_grass = self.get_grass_area(context)
-        high_grass = 0.1 #meters
+        #high_grass = 0.1 #meters
+        high_grass = context.scene.my_number_settings.hight_grass/100 #cmeters
         grass_density = context.scene.my_number_settings.density_grass #kg/m3
         #grass_density = 100
         weight_grass = area_grass * high_grass * grass_density
@@ -2599,6 +2601,12 @@ class INPUT_NUMBER_01(bpy.types.PropertyGroup):
     
     density_fiber: bpy.props.FloatProperty(
         name="density fiber", default=1800, description="Introduce Densidad en kg/m3")
+    
+    hight_fiber: bpy.props.FloatProperty(
+        name="hight fiber", default=5, description="Introduce espesor de la fibra con resina")
+    
+    hight_grass: bpy.props.FloatProperty(
+        name="hight grass", default=10, description="Introduce espezor de la tierra")
     
 class BUTTOM_SET_AREA(bpy.types.Operator):
     bl_label = "BUTTOM_SET_AREA"
@@ -3185,16 +3193,22 @@ class PANEL_CUSTOM_UI_00(bpy.types.Panel):
         row.prop(context.scene.my_text_settings, "my_text_property_area", text="Area")
 
         row = layout.row()
-        row.prop(context.scene.my_number_settings, "density_foam", text="Dens Poliprepileno")
+        row.prop(context.scene.my_number_settings, "density_foam", text="Dens Foam kg/m3")
 
         row = layout.row()
-        row.prop(context.scene.my_number_settings, "density_wood", text="Dens Madera")
+        row.prop(context.scene.my_number_settings, "density_wood", text="Dens Madera kg/m3")
 
         row = layout.row()
-        row.prop(context.scene.my_number_settings, "density_grass", text="Dens tierra")
+        row.prop(context.scene.my_number_settings, "density_grass", text="Dens tierra kg/m3")
 
         row = layout.row()
-        row.prop(context.scene.my_number_settings, "density_fiber", text="Dens fibra")
+        row.prop(context.scene.my_number_settings, "density_fiber", text="Dens fibra kg/m3")
+
+        row = layout.row()
+        row.prop(context.scene.my_number_settings, "hight_fiber", text="Esp fibra mm")
+
+        row = layout.row()
+        row.prop(context.scene.my_number_settings, "hight_grass", text="Esp Tierra cm")
         
         # add button custom
         row = layout.row()
