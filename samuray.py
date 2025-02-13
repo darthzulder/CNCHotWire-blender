@@ -54,8 +54,10 @@ class funcs():
     quantity_cubes = 0
 
     # list of top objects that will be grouped and will be cut
-    list_top_objects = []
+    list_top_objects = []    
     
+    # Sensibilidad del giro en grados
+    sensitivity = 15.0
 
     def __init__(self):
         self.select_before = None
@@ -2508,6 +2510,87 @@ class funcs():
         weight_grass = area_grass * high_grass * grass_density
 
         return weight_grass, area_grass
+    # Función para rotar la vista relativa a su orientación actual
+    def rotate_view(context, axis, angle_degrees):
+        region_3d = context.space_data.region_3d
+        angle_radians = math.radians(angle_degrees * sensitivity)
+        rotation_quaternion = mathutils.Quaternion(axis, angle_radians)
+        region_3d.view_rotation = rotation_quaternion @ region_3d.view_rotation
+    # Función para actualizar la sensibilidad
+    def update_sensitivity(self, context):
+        global sensitivity
+        sensitivity = context.scene.view_rotation_sensitivity
+
+    def plane_corta_objeto(plane_obj, target_obj, epsilon=1e-6):
+        """
+        Comprueba si 'plane_obj' (objeto plano) corta/interseca al 'target_obj' (objeto irregular).
+        
+        Retorna True si el plano divide al objeto (al menos un vértice a cada lado del plano),
+        o False en caso contrario.
+        
+        Nota: Ambos objetos deben ser de tipo 'MESH'.
+        """
+        # Verificar que ambos objetos sean de malla
+        if plane_obj.type != 'MESH' or target_obj.type != 'MESH':
+            print("Ambos objetos deben ser de tipo MESH")
+            return False
+
+        # Obtener la malla del plano y asegurarse de que tenga caras
+        plane_mesh = plane_obj.data
+        if not plane_mesh.polygons:
+            print("El objeto plano no tiene caras.")
+            return False
+
+        # Tomar la primera cara del plano para obtener la normal y un punto
+        poly = plane_mesh.polygons[0]
+        
+        # Obtener la normal de la cara en coordenadas locales y transformarla a mundo
+        local_normal = poly.normal.copy()
+        world_normal = plane_obj.matrix_world.to_3x3() @ local_normal
+        world_normal.normalize()
+        
+        # Tomar un vértice de la cara para usarlo como punto de referencia del plano
+        vert_idx = poly.vertices[0]
+        local_point = plane_mesh.vertices[vert_idx].co.copy()
+        world_point = plane_obj.matrix_world @ local_point
+
+        # Variables para detectar si hay vértices a ambos lados del plano
+        tiene_positivo = False
+        tiene_negativo = False
+
+        # Obtener la malla del objeto irregular
+        target_mesh = target_obj.data
+
+        # Recorrer cada vértice del objeto irregular en coordenadas del mundo
+        for vert in target_mesh.vertices:
+            world_vert = target_obj.matrix_world @ vert.co
+            # Calcular la distancia signada del vértice al plano
+            d = (world_vert - world_point).dot(world_normal)
+            if d > epsilon:
+                tiene_positivo = True
+            elif d < -epsilon:
+                tiene_negativo = True
+
+            # Si ya se detecta que hay vértices a ambos lados, se concluye que el plano corta al objeto
+            if tiene_positivo and tiene_negativo:
+                return True
+
+        # Si todos los vértices están por un mismo lado (o exactamente sobre el plano), el plano no corta el objeto
+        return False
+
+    # Ejemplo de uso:
+    # Asegúrate de tener un objeto llamado "Plane" y otro llamado "ObjetoIrregular" en la escena.
+    # plane_obj = bpy.data.objects["Plane"]
+    # target_obj = bpy.data.objects["ObjetoIrregular"]
+    # resultado = plane_corta_objeto(plane_obj, target_obj)
+    # print("El plano corta al objeto:", resultado)
+
+    def obtener_objetos_en_coleccion(self, coleccion):
+        """Obtiene todos los objetos de una colección, incluyendo los de sus subcolecciones."""
+        objetos = list(coleccion.objects)  # Objetos directos de la colección
+        for subcoleccion in coleccion.children:
+            objetos.extend(self.obtener_objetos_en_coleccion(subcoleccion))  # Recursión para subcolecciones
+        return objetos
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
@@ -3116,21 +3199,6 @@ class BUTTOM_CUSTOM14(bpy.types.Operator):
     def description(cls, context, properties):
         return "object.button_custom14"
 
-# Sensibilidad del giro en grados
-sensitivity = 15.0
-# Función para rotar la vista relativa a su orientación actual
-def rotate_view(context, axis, angle_degrees):
-    region_3d = context.space_data.region_3d
-    angle_radians = math.radians(angle_degrees * sensitivity)
-    rotation_quaternion = mathutils.Quaternion(axis, angle_radians)
-    region_3d.view_rotation = rotation_quaternion @ region_3d.view_rotation
-
-# Función para actualizar la sensibilidad
-def update_sensitivity(self, context):
-    global sensitivity
-    sensitivity = context.scene.view_rotation_sensitivity
-
-# Operadores para cada botón de giro de vista
 class RotateViewLeft(bpy.types.Operator):
     bl_idname = "view3d.rotate_view_left"
     bl_label = "Rotate View Left"
@@ -3154,6 +3222,9 @@ class RotateViewUp(bpy.types.Operator):
     bl_label = "Rotate View Up"
 
     def execute(self, context):
+        #check if the plane cut the irregular objects in the actual collection
+        #bpy.ops.object.check_plane_cut()
+
         # Rotar alrededor del eje "derecho" de la vista (x-axis de la vista) hacia arriba
         region_3d = context.space_data.region_3d
         right_axis = region_3d.view_rotation @ mathutils.Vector((1, 0, 0))
@@ -3169,6 +3240,42 @@ class RotateViewDown(bpy.types.Operator):
         region_3d = context.space_data.region_3d
         right_axis = region_3d.view_rotation @ mathutils.Vector((1, 0, 0))
         rotate_view(context, right_axis, -1)
+        return {'FINISHED'}
+
+class OBJECT_OT_check_plane_cut(bpy.types.Operator):
+    """Comprueba si el objeto 'Plane' corta alguno de los objetos en la colección 'P.130'"""
+    bl_idname = "object.check_plane_cut"
+    bl_label = "Verificar corte del plano"
+
+    def execute(self, context):
+        global func
+        if func is None:
+            func = funcs()
+        
+        plane_obj = bpy.data.objects.get(context.active_object.name)
+        if not plane_obj:
+            self.report({'ERROR'}, "No se encontró el objeto 'Plane'")
+            return {'CANCELLED'}
+
+        # Se obtiene la colección "P.130"
+        collection = bpy.data.collections.get(context.active_object.users_collection[0].name)
+        if not collection:
+            self.report({'ERROR'}, "No se encontró la colección 'P.130'")
+            return {'CANCELLED'}
+
+        # Lista para acumular los nombres de objetos que son cortados por el plano
+        cut_objects_list = []
+        for obj in func.obtener_objetos_en_coleccion(collection):
+            if obj.name.startswith("irregObjPart."):
+                if func.plane_corta_objeto(plane_obj, obj):
+                    cut_objects_list.append(obj.name)
+
+        if cut_objects_list:
+            cut_objects_str = "\n".join(cut_objects_list)
+            # Invocar el diálogo de confirmación pasando la lista de objetos afectados
+            bpy.ops.object.confirm_cut_dialog('INVOKE_DEFAULT', cut_objects=cut_objects_str)
+        else:
+            self.report({'INFO'}, "El plano no corta ningún objeto irregular.")
         return {'FINISHED'}
 # PANEL UI (PART 1 DRAW)
 ####################################################
@@ -3549,6 +3656,48 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
         row02 = layout.row()
         row02.operator("view3d.rotate_view_down", text="Rotate Down") 
 
+# DIALOGS UI (PART 2 DRAW)
+####################################################
+
+class OBJECT_OT_confirm_cut_dialog(bpy.types.Operator):
+    """Diálogo de alerta: El plano corta los siguientes objetos. ¿Desea continuar?"""
+    bl_idname = "object.confirm_cut_dialog"
+    bl_label = "Alerta: Corte detectado"
+
+    # Se pasará una cadena con los nombres de los objetos afectados
+    cut_objects: bpy.props.StringProperty(name="Objetos cortados", default="")
+
+    # Propiedad para elegir la acción
+    action: bpy.props.EnumProperty(
+        name="Acción",
+        items=[
+            ("CONTINUAR", "Continuar", "Continuar con la operación"),
+            ("CANCELAR", "Cancelar", "Cancelar la operación")
+        ],
+        default="CANCELAR"
+    )
+
+    def execute(self, context):
+        if self.action == "CONTINUAR":
+            self.report({'INFO'}, "El usuario ha decidido continuar.")
+            # Aquí puedes agregar el código que se deba ejecutar al continuar.
+        else:
+            self.report({'WARNING'}, "Operación cancelada por el usuario.")
+            # Aquí puedes agregar código de limpieza o detener la ejecución.
+        return {'FINISHED'}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="El plano corta los siguientes objetos:")
+        # Separamos los nombres para mostrarlos en líneas distintas
+        for name in self.cut_objects.splitlines():
+            layout.label(text=name)
+        layout.separator()
+        layout.label(text="¿Desea continuar?")
+        layout.prop(self, "action", expand=True)
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
 # REGISTER (PART 2)
 ####################################################
 def register():
@@ -3636,14 +3785,7 @@ def unregister():
     bpy.utils.register_class(RotateViewDown)
     
     # Agregar propiedad de sensibilidad a la escena
-    bpy.types.Scene.view_rotation_sensitivity = bpy.props.FloatProperty(
-        name="Sensitivity",
-        description="Adjust view rotation sensitivity (degrees)",
-        default=15.0,
-        min=1.0,
-        max=90.0,
-        update=update_sensitivity
-    )
+    del bpy.types.Scene.view_rotation_sensitivity
 
 if __name__ == "__main__":
     register()
