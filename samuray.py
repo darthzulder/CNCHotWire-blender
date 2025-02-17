@@ -5,7 +5,7 @@ bl_info = {
     "name": "CNC HotWire Preparetion",
     "description": "Change origin Position ",
     "author": "nbravo",
-    "version": (1, 2),
+    "version": (1, 3),
     "blender": (2, 93, 1),
     "location": "View3D > UI",
     "warning":"(in ALFA production)",
@@ -55,7 +55,14 @@ class funcs():
 
     # list of top objects that will be grouped and will be cut
     list_top_objects = []    
-        
+
+    def get_path(self):
+        blend_file_path = bpy.data.filepath
+        if blend_file_path:
+            base_dir = os.path.dirname(blend_file_path)
+            return base_dir
+        else:
+            print("El archivo Blender no está guardado. No se puede determinar la ruta.")    
 
     def __init__(self):
         self.select_before = None
@@ -783,12 +790,13 @@ class funcs():
 
         scale=1000
         i=0
-        pathFileName=".\\PARTES\\BaseCleanBlock"
+        blend_file_path = self.get_path()
+        pathFileName=blend_file_path + "\\PARTES\\BaseCleanBlock"
             
-        pathFileNumber=pathFileName+".nc"
+        pathFileNumber = pathFileName + ".nc"
         #create .nc file 
         try:
-            os.makedirs(".\\PARTES\\", exist_ok=True)
+            os.makedirs(blend_file_path + "\\PARTES\\", exist_ok=True)
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
@@ -1024,17 +1032,18 @@ class funcs():
     def write_to_file(self,verts,rotation_z_degrees,collection_name,update=False, wood=False):
         scale=1000
         i=0
+        blend_file_path = self.get_path()
         if wood == 'X':
-            pathFileName=".\\PARTES\\"+collection_name+"\\"+collection_name+"_WX."
+            pathFileName=blend_file_path + "\\PARTES\\"+collection_name+"\\"+collection_name+"_WX."
         elif wood == 'Y':
-            pathFileName=".\\PARTES\\"+collection_name+"\\"+collection_name+"_WY."
+            pathFileName=blend_file_path + "\\PARTES\\"+collection_name+"\\"+collection_name+"_WY."
         else:
-            pathFileName=".\\PARTES\\"+collection_name+"\\"+collection_name+"."
+            pathFileName=blend_file_path + "\\PARTES\\"+collection_name+"\\"+collection_name+"."
             
         pathFileNumber=pathFileName+'%03d' % i +"_samurai.nc"
         #create .nc file 
         try:
-            os.makedirs(".\\PARTES\\"+collection_name, exist_ok=True)
+            os.makedirs(blend_file_path + "\\PARTES\\"+collection_name, exist_ok=True)
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
@@ -1118,12 +1127,13 @@ class funcs():
         
         scale=1000
         i=0
-        pathFileName=".\\PARTES\\"+collection_name+"\\"+collection_name+"."
+        blend_file_path = self.get_path()
+        pathFileName=blend_file_path + "\\PARTES\\"+collection_name+"\\"+collection_name+"."
             
         pathFileNumber=pathFileName+'%03d' % i +"_TOP_samurai.nc"
         #create .nc file 
         try:
-            os.makedirs(".\\PARTES\\"+collection_name, exist_ok=True)
+            os.makedirs(blend_file_path + "\\PARTES\\"+collection_name, exist_ok=True)
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
@@ -1667,7 +1677,8 @@ class funcs():
         irregular_obj = [obj for obj in bpy.data.objects if obj.name.startswith("irregObjPart.") and collection_name in obj.users_collection[0].name]        
 
         #--Delete all cut-files that have been created before for this collection
-        folder_path = ".\\PARTES\\"+collection_name
+        blend_file_path = self.get_path()
+        folder_path = blend_file_path + "\\PARTES\\"+collection_name
         
         pattern = r"^{0}\.\d{{3}}_samurai\.nc$".format(re.escape(collection_name))
 
@@ -1697,13 +1708,14 @@ class funcs():
         foam_x = context.scene.my_number_settings.my_number_property_foam_block_x
         foam_y = context.scene.my_number_settings.my_number_property_foam_block_y
         foam_z = context.scene.my_number_settings.my_number_property_foam_block_z
+        blend_file_path = self.get_path()
 
         try:
-            os.makedirs(".\\PARTES\\"+collection_name, exist_ok=True)  
+            os.makedirs(blend_file_path + "\\PARTES\\"+collection_name, exist_ok=True)  
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
-        output_path=".\\PARTES\\"+collection_name+"\\"+stl_name+".stl"
+        output_path=blend_file_path + "\\PARTES\\"+collection_name+"\\"+stl_name+".stl"
         #get foamBlock object
         objective_object = [obj for obj in bpy.data.objects if obj.name.startswith(obj_name_base) and collection_name in obj.users_collection[0].name]
         
