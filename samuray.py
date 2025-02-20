@@ -20,10 +20,28 @@ import math
 import re
 
 # Importaciones de Blender
+
+def ensure_import(package):
+    try:
+        import package
+    except Exception as e:
+        import sys
+        import subprocess
+        print('installing package', package)
+        PYTHON_PATH = sys.executable
+        subprocess.run([str(PYTHON_PATH), "-m", "pip", "install", package])
+
+ensure_import('Polygon')
+
 import bpy
 import bmesh
 from mathutils import Vector
 import mathutils
+from shapely.geometry import Polygon
+from shapely.ops import unary_union
+import numpy as np
+
+
 # Importaciones locales (si las hubiera)
 # from . import funciones  # Descomentar si se utilizan funciones de otros módulos
 
@@ -36,7 +54,8 @@ class funcs():
     foam_block_y = 0.980
     foam_block_z = 1.180
 
-    dist_X_center = 1.137
+    dist_X_cnc_center = 1.137 
+    dist_X_cnc_back = 1.013
 
     cut_thickness_x = 0.02
     cut_thickness_y = 0.06
@@ -52,6 +71,8 @@ class funcs():
     volume_total_irregular = 0
     volume_total_cubes = 1
     quantity_cubes = 0
+
+    Toleran = 1e-6
 
     # list of top objects that will be grouped and will be cut
     list_top_objects = []    
@@ -121,7 +142,7 @@ class funcs():
         cnc_size_Y = 2.095
         cnc_size_Z = 1.250
         scale = 1
-        dist_X_center = self.dist_X_center #distance X from bootom to center
+        dist_X_center = self.dist_X_cnc_center #distance X from bootom to center
         
         cnc_center_X = ((cnc_size_X/2)-dist_X_center)
         cnc_center_Y = cnc_size_Y/2
@@ -354,7 +375,7 @@ class funcs():
         cnc_size_X = 2.150
         cnc_size_Y = 2.095
         cnc_size_Z = 1.250
-        dist_X_center = self.dist_X_center #distance X from bootom to center
+        dist_X_center = self.dist_X_cnc_center #distance X from bootom to center
 
         # store the location of current 3d cursor
         #saved_location = bpy.context.scene.cursor.location.xyz   # returns a vector
@@ -780,7 +801,7 @@ class funcs():
         foam_block_x = self.foam_block_x*1000
         foam_block_y = self.foam_block_y*1000
         foam_block_z = self.foam_block_z*1000
-        dist_X_center = self.dist_X_center*1000
+        dist_X_center = self.dist_X_cnc_center*1000
 
 
         front_x = dist_X_center - (foam_block_x/2)
@@ -1223,8 +1244,8 @@ class funcs():
         # Set subdivision level for the siluete
         siluete_multires = 8
 
-        margen_max_cnc=1.137
-        margen_min_cnc=1.013
+        margen_max_cnc=self.dist_X_cnc_center
+        margen_min_cnc=self.dist_X_cnc_back
 
         # Get the selected object
         selected_object = bpy.context.active_object
@@ -2252,7 +2273,7 @@ class funcs():
                     coords_to_cut = (B-A)
                     
                     #change coords_to_cut to local coords
-                    coords_to_cut_local = tuple((round(((coord[0]-self.dist_X_center)*-1000), 4), round((coord[1]*1000), 4), round((coord[2]*1000), 4)) for coord in [Vector((vert)) for vert in coords_to_cut])
+                    coords_to_cut_local = tuple((round(((coord[0]-self.dist_X_cnc_center)*-1000), 4), round((coord[1]*1000), 4), round((coord[2]*1000), 4)) for coord in [Vector((vert)) for vert in coords_to_cut])
 
                     #coords_to_cut_local = [obj_block_cut.matrix_world @ vert.co for vert in coords_to_cut] 
 
@@ -2574,6 +2595,263 @@ class funcs():
         for subcoleccion in coleccion.children:
             objetos.extend(self.obtener_objetos_en_coleccion(subcoleccion))  # Recursión para subcolecciones
         return objetos
+
+    def create_silhouette_fast(self, obj):
+
+        # Verifica que el objeto activo es de tipo MESH
+        if obj is None or obj.type != 'MESH':
+            raise Exception("Selecciona un objeto de tipo malla.")
+
+        # Nos aseguramos de estar en modo Object
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        # Cargar la malla en BMesh para extraer las caras,
+        # aplicando la transformación world para que la silueta quede en la posición real del objeto.
+        mesh = obj.data
+        bm = bmesh.new()
+        bm.from_mesh(mesh)
+
+        polygons = []
+        for face in bm.faces:
+            coords = []
+            for v in face.verts:
+                # Convertir a coordenadas mundiales
+                world_coord = obj.matrix_world @ v.co
+                # Proyección desde el eje Y: usamos (x, z) y descartamos la coordenada Y
+                coords.append((world_coord.x, world_coord.z))
+            if len(coords) >= 3:
+                try:
+                    poly = Polygon(coords)
+                    # Corregir polígono en caso de no ser válido (por autointersecciones, etc.)
+                    if not poly.is_valid:
+                        poly = poly.buffer(0)
+                    if not poly.is_empty:
+                        polygons.append(poly)
+                except Exception as e:
+                    print("Error procesando una cara:", e)
+        bm.free()
+
+        if not polygons:
+            raise Exception("No se encontraron caras válidas en la malla.")
+
+        # Realizar la unión de todos los polígonos de forma optimizada con Shapely (unary_union usa GEOS en C++)
+        union_poly = unary_union(polygons)
+
+        # Si la unión es un MultiPolygon, se selecciona el de mayor área (probablemente el contorno exterior)
+        if union_poly.geom_type == 'MultiPolygon':
+            union_poly = max(union_poly.geoms, key=lambda p: p.area)
+
+        # Extraer las coordenadas del contorno exterior.
+        # Estas coordenadas están en el plano XZ.
+        exterior_coords = list(union_poly.exterior.coords)
+
+        # Definir el valor de Y para la proyección: usamos la posición Y (world) del objeto original
+        y_value = obj.matrix_world.to_translation().y
+
+        # Crear una nueva malla usando BMesh para la silueta resultante
+        bm_union = bmesh.new()
+        verts = []
+        for (x, z) in exterior_coords:
+            # Convertimos las coordenadas 2D (x, z) a 3D asignando la coordenada Y obtenida
+            v = bm_union.verts.new((x, y_value, z))
+            verts.append(v)
+        bm_union.verts.ensure_lookup_table()
+
+        # Crear la única cara con los vértices (asegurándonos de que el orden sea correcto)
+        try:
+            bm_union.faces.new(verts)
+        except Exception as e:
+            print("No se pudo crear la cara:", e)
+
+        bm_union.normal_update()
+
+        # Crear la nueva malla en Blender y asignarle la geometría de la silueta
+        mesh_union = bpy.data.meshes.new(obj.name + "_Contorno")
+        bm_union.to_mesh(mesh_union)
+        bm_union.free()
+
+        # Crear un nuevo objeto con la messa resultante y agregarlo a la escena, asegurándose de que quede activo y seleccionado
+        obj_union = bpy.data.objects.new(obj.name + "_Contorno", mesh_union)
+        obj_union.location = obj.location
+        bpy.context.collection.objects.link(obj_union)
+
+        
+
+        print("Silueta creada correctamente desde el eje Y y ubicada en la misma posición que el objeto original.")
+        return obj_union
+    
+    def get_ordered_contour_vertices(self, obj, tol=Toleran):
+        """
+        Extrae los vértices ordenados (tuplas (x, y, z)) de un objeto que contiene un contorno cerrado.
+        Si el objeto tiene una cara, se usa el orden de sus loops; de lo contrario se reconstruye el lazo a partir de las aristas.
+        """
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        bm.faces.ensure_lookup_table()
+        bm.edges.ensure_lookup_table()
+        
+        verts = []
+        if bm.faces:
+            face = bm.faces[0]
+            verts = [tuple(loop.vert.co) for loop in face.loops]
+            if len(verts) > 1 and all(abs(verts[0][i] - verts[-1][i]) < tol for i in range(3)):
+                verts.pop()
+        else:
+            all_verts = {v for e in bm.edges for v in e.verts}
+            start = next((v for v in all_verts if v.link_edges), None)
+            if not start:
+                bm.free()
+                raise Exception("El objeto no tiene vértices conectados.")
+            ordered = []
+            current, prev = start, None
+            while True:
+                ordered.append(current)
+                next_v = next((edge.other_vert(current) for edge in current.link_edges if edge.other_vert(current) != prev), None)
+                if not next_v or next_v == start:
+                    break
+                prev, current = current, next_v
+            verts = [tuple(v.co) for v in ordered]
+        
+        bm.free()
+        return verts
+    
+    def get_longest_circular_true_segment(self, is_true):
+        """
+        Dada una lista booleana (en orden circular), retorna la lista de índices que
+        forman la secuencia continua más larga con valor True, considerando la circularidad.
+        """
+        n = len(is_true)
+        doubled = is_true + is_true
+        best_length = 0
+        best_start = 0
+        current_length = 0
+        current_start = 0
+        for i, val in enumerate(doubled):
+            if val:
+                if current_length == 0:
+                    current_start = i
+                current_length += 1
+            else:
+                if current_length > best_length:
+                    best_length = current_length
+                    best_start = current_start
+                current_length = 0
+        if current_length > best_length:
+            best_length = current_length
+            best_start = current_start
+        best_length = min(best_length, n)
+        return [(best_start + i) % n for i in range(best_length)]
+
+    def modify_silhouette_contour(self, obj, order=1, tol=Toleran):
+        """
+        Modifica el contorno del objeto con los siguientes pasos:
+        - Identifica la base (vértices con Z mínima).
+        - Conserva solo los extremos de la base.
+        - Crea nuevos vértices extruidos 1m a la izquierda y derecha.
+        - Reconstruye el contorno.
+        - Permite definir el orden de los vértices con `order` (1: empieza por la izquierda, -1: por la derecha).
+        """
+        margen_max_cnc = self.dist_X_cnc_center
+        margen_min_cnc = self.dist_X_cnc_back
+        loc_x, loc_y, loc_z = obj.location
+        print(f"--------------X------:{loc_x}")
+        verts = self.get_ordered_contour_vertices(obj, tol)
+        if not verts:
+            raise Exception("No se obtuvieron vértices del contorno.")
+        
+        if len(verts) > 1 and all(abs(verts[0][i] - verts[-1][i]) < tol for i in range(3)):
+            verts.pop()
+        n = len(verts)
+        
+        # Determinar la base (vértices con Z mínima)
+        min_z = min(v[2] for v in verts)
+        is_base = [abs(v[2] - min_z) < tol for v in verts]
+        base_idx = self.get_longest_circular_true_segment(is_base)
+        if not base_idx:
+            raise Exception("No se encontró la base (vértices con Z mínima).")
+            
+        base_start, base_end = min(base_idx), max(base_idx)
+        #base_block = verts[base_start:base_end+1]
+
+        verts_np = np.array(verts)
+        base_idx_np = np.array(base_idx)
+        base_block_np = verts_np[base_idx_np]
+        base_block = base_block_np.tolist()
+
+        left_base  = max(base_block, key=lambda v: v[0])
+        right_base = min(base_block, key=lambda v: v[0])
+        
+        new_right = (loc_x - margen_min_cnc, right_base[1], right_base[2])
+        new_left  = (loc_x + margen_max_cnc, left_base[1], left_base[2])
+        
+        # Calcular el segmento complementario en orden circular, iniciando en base_indices[0]
+        start = base_idx[0]
+        full_order = [(start + i) % n for i in range(n)]
+        segment_indices = [i for i in full_order if i not in base_idx]
+        segment = [verts[i] for i in segment_indices]
+        
+        new_contour = [new_right, right_base] + segment + [left_base, new_left]
+        
+        return new_contour if order == 1 else list(reversed(new_contour))
+
+    def create_modified_silhouette_object(self, original_obj, order=1):
+        """
+        Crea un nuevo objeto a partir del contorno modificado.
+        Se generan únicamente vértices y aristas (sin cerrar el contorno).
+        Se puede definir el orden inicial de los vértices con `order` (1 = izquierda, -1 = derecha).
+        """
+        new_verts = self.modify_silhouette_contour(original_obj, order)
+        
+        bm = bmesh.new()
+        bm_verts = [bm.verts.new(co) for co in new_verts]
+        bm.verts.index_update()
+        
+        for i in range(len(bm_verts)-1):
+            try:
+                bm.edges.new((bm_verts[i], bm_verts[i+1]))
+            except Exception as e:
+                print(f"Error al crear arista entre vértice {i} y {i+1}: {e}")
+        bm.normal_update()
+        
+        mesh = bpy.data.meshes.new(f"{original_obj.name}_Modificado")
+        bm.to_mesh(mesh)
+        bm.free()
+        
+        obj_new = bpy.data.objects.new(f"{original_obj.name}_Modificado", mesh)
+        bpy.context.collection.objects.link(obj_new)
+        obj_new.matrix_world = original_obj.matrix_world.copy()
+    
+        #borrar silueta original
+        bpy.data.objects.remove(original_obj, do_unlink=True)
+        
+        return new_verts
+
+    def picar(self):
+        print("PICANDO")
+        detail_level = 4
+        rotation = 180/detail_level        
+        obj = bpy.context.active_object
+        collection_name = obj.users_collection[0].name
+        for i in range(detail_level):
+            obj_silhuette = self.create_silhouette_fast(obj)
+            order = -1  # 1 para comenzar desde la izquierda, -1 para la derecha
+            verts = self.create_modified_silhouette_object(obj_silhuette, order=order)
+
+            #----create GCODE file
+            vertex_coordinates = [{'x':v[0], 'y':v[1], 'z':v[2]} for v in verts ]
+            self.write_to_file(vertex_coordinates,math.degrees(obj.rotation_euler.z),collection_name)
+
+            obj.rotation_euler.z += math.radians(rotation)
+            print(f"COMPARACION {round(math.degrees(obj.rotation_euler.z), 2)} >= {180.0} ")
+
+
+            if round(math.degrees(obj.rotation_euler.z), 2) >= 180.0:
+                obj.rotation_euler.z = 0
+                print(f"YES reset rotation  grade : {round(math.degrees(obj.rotation_euler.z ),2)}")
+            else:
+                print(f"NO reset rotation  grade : {round(math.degrees(obj.rotation_euler.z ),2)}")
+            
+            print(f"rotation: {rotation} ; i {i} ; grado estado: {round(math.degrees(obj.rotation_euler.z),2)}")
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
@@ -3278,6 +3556,27 @@ class OBJECT_OT_check_plane_cut(bpy.types.Operator):
             func.cut_and_group_parts(context)
         return {'FINISHED'}
 # PANEL UI (PART 1 DRAW)
+class BUTTOM_CUT_SILH_COMPLETE(bpy.types.Operator):
+    """Comprueba si el objeto 'Plane' corta alguno de los objetos en la colección 'P.130'"""
+    bl_idname = "object.buttom_cut_silh_complete"
+    bl_label = "BUTTOM_CUT_SILH_COMPLETE"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        
+        global func
+        if func is None:
+            func = funcs()
+        func.picar()
+        #func.cut_and_group_parts(context)
+
+        print("execute BUTTOM_CUT_SILH_COMPLETE custom ok!")
+
+        return {'FINISHED'}
+    @classmethod
+    def description(cls, context, properties):
+        return "object.button_custom14"
+# PANEL UI (PART 1 DRAW)
 ####################################################
 
 class PANEL_CUSTOM_UI_00(bpy.types.Panel):
@@ -3626,6 +3925,11 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
                     # add button custom
                     row02 = layout.row()
                     row02.scale_y = 1
+                    row02.operator("object.buttom_cut_silh_complete", text= "PICADO ROTATIVO")
+
+                    # add button custom
+                    row02 = layout.row()
+                    row02.scale_y = 1
                     row02.operator("object.button_custom0605", text= "FINISH")
             else:
                         #create simple row
@@ -3745,6 +4049,7 @@ def register():
     bpy.utils.register_class(BUTTOM_CUSTOM12)
     bpy.utils.register_class(BUTTOM_CUSTOM13)
     bpy.utils.register_class(BUTTOM_CUSTOM14)
+    bpy.utils.register_class(BUTTOM_CUT_SILH_COMPLETE)
     bpy.utils.register_class(RotateViewLeft)
     bpy.utils.register_class(RotateViewRight)
     bpy.utils.register_class(RotateViewUp)
@@ -3794,6 +4099,7 @@ def unregister():
     bpy.utils.unregister_class(BUTTOM_CUSTOM12)
     bpy.utils.unregister_class(BUTTOM_CUSTOM13)
     bpy.utils.unregister_class(BUTTOM_CUSTOM14)
+    bpy.utils.unregister_class(BUTTOM_CUT_SILH_COMPLETE)
     bpy.utils.unregister_class(RotateViewLeft)
     bpy.utils.unregister_class(RotateViewRight)
     bpy.utils.unregister_class(RotateViewUp)
