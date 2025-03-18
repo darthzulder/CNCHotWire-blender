@@ -1050,33 +1050,43 @@ class funcs():
                             space.shading.type = 'WIREFRAME'
                             bpy.ops.view3d.view_axis(type='FRONT')
 
-    def write_to_file(self,verts,rotation_z_degrees,collection_name,update=False, wood=False):
+    def write_to_file(self,verts,rotation_z_degrees,collection_name,update=False, wood=False, rotative_cut=False, order=0):
         scale=1000
         i=0
         blend_file_path = self.get_path()
+        pathFile = blend_file_path + "\\PARTES\\"+collection_name
         if wood == 'X':
-            pathFileName=blend_file_path + "\\PARTES\\"+collection_name+"\\"+collection_name+"_WX."
+            file_name = collection_name+"_WX."
         elif wood == 'Y':
-            pathFileName=blend_file_path + "\\PARTES\\"+collection_name+"\\"+collection_name+"_WY."
+            file_name = collection_name+"_WY."
+        elif rotative_cut == True:
+            file_name = collection_name+"_RC."
         else:
-            pathFileName=blend_file_path + "\\PARTES\\"+collection_name+"\\"+collection_name+"."
+            file_name = collection_name+"."
             
-        pathFileNumber=pathFileName+'%03d' % i +"_samurai.nc"
+        pathFileNumber=pathFile + "\\" + file_name +'%03d' % i +"_samurai.nc"
         #create .nc file 
         try:
-            os.makedirs(blend_file_path + "\\PARTES\\"+collection_name, exist_ok=True)
+            os.makedirs(pathFile, exist_ok=True)
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
         while os.path.exists(pathFileNumber):
             i=i+1
-            pathFileNumber=pathFileName+'%03d' % i +"_samurai.nc"
+            pathFileNumber=pathFile+ "\\" + file_name + '%03d' % i +"_samurai.nc"
         if update == True:
             #if not wood:
             i=i-1
-            pathFileNumber=pathFileName+'%03d' % i +"_samurai.nc"
+            pathFileNumber=pathFile+ "\\" + file_name + '%03d' % i +"_samurai.nc"
+        
+        
         f = open(pathFileNumber,"w+")
-        f.write(f'(GCODE_from_Blender)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
+        
+        file_name_number = file_name + '%03d' % i +"_samurai.nc"
+        if order == 0:
+            f.write(f'({file_name_number})\n(GCODE_from_Blender)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
+        else:
+            f.write(f'({file_name_number})\n(GCODE_from_Blender)\nM9\nG21\nG90\nF600\nM3\n')
         
         #direction will be from +X  to -X
         x_first = verts[0]['x']
@@ -1085,6 +1095,10 @@ class funcs():
 
         for i in custom_range:
             x=round((x_first - verts[i]['x']) * scale,2)
+            if order == 1:
+                x += 2150
+            print(f"x = round((x_first - verts[i]['x']) * scale,2)")
+            print(f"{x} = round(({x_first} - {verts[i]['x']}) * {scale},2)")
             y=round(verts[i]['y'] * scale,2)
 
             if verts[i]['z'] > 0 and wood == False:
@@ -1139,10 +1153,12 @@ class funcs():
                             creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step-crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
                             f.write(creases_down)
 
-        if x != 0:    
-            f.write(f'G01X2150Y1200A{rotation_z_degrees}\n') 
-            f.write(f'G01X0Y1200A{rotation_z_degrees}\n')
-        f.write(f'(Zigzag)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
+        if rotative_cut == False:
+            if x != 0 :    
+                f.write(f'G01X2150Y1200A{rotation_z_degrees}\n') 
+                f.write(f'G01X0Y1200A{rotation_z_degrees}\n')
+            f.write(f'(Zigzag)\nM9\nG21\nG90\nF600\nM3\nG00X0.0000Y0.0000A0\nG01X0.0000Y0.0000A0\nF600\n')
+        
 
     def write_to_file_by_arms(self,verts,collection_name,update=False):
         
@@ -2823,23 +2839,28 @@ class funcs():
     
         #borrar silueta original
         bpy.data.objects.remove(original_obj, do_unlink=True)
+        bpy.data.objects.remove(obj_new, do_unlink=True)
         
         return new_verts
 
-    def picar(self):
+    def rotate_cut(self,detail_level_input):
         print("PICANDO")
-        detail_level = 4
+        detail_level = detail_level_input
         rotation = 180/detail_level        
         obj = bpy.context.active_object
         collection_name = obj.users_collection[0].name
+        order = -1  # 1 para comenzar desde la izquierda, -1 para la derecha
         for i in range(detail_level):
             obj_silhuette = self.create_silhouette_fast(obj)
-            order = -1  # 1 para comenzar desde la izquierda, -1 para la derecha
+            
             verts = self.create_modified_silhouette_object(obj_silhuette, order=order)
+
+            dist_max_back = (self.dist_X_cnc_center + self.dist_X_cnc_back) * 1000
 
             #----create GCODE file
             vertex_coordinates = [{'x':v[0], 'y':v[1], 'z':v[2]} for v in verts ]
-            self.write_to_file(vertex_coordinates,math.degrees(obj.rotation_euler.z),collection_name)
+            print (f"VERTICES A FILE: {vertex_coordinates}")
+            self.write_to_file(vertex_coordinates,-1 * math.degrees(obj.rotation_euler.z),collection_name,rotative_cut=True, order = order)
 
             obj.rotation_euler.z += math.radians(rotation)
             print(f"COMPARACION {round(math.degrees(obj.rotation_euler.z), 2)} >= {180.0} ")
@@ -2852,6 +2873,7 @@ class funcs():
                 print(f"NO reset rotation  grade : {round(math.degrees(obj.rotation_euler.z ),2)}")
             
             print(f"rotation: {rotation} ; i {i} ; grado estado: {round(math.degrees(obj.rotation_euler.z),2)}")
+            order *= -1
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
@@ -2951,6 +2973,10 @@ class INPUT_NUMBER_01(bpy.types.PropertyGroup):
     
     hight_grass: bpy.props.FloatProperty(
         name="hight grass", default=10, description="Introduce espezor de la tierra")
+
+    rotate_cut_resolution: bpy.props.IntProperty(
+        name="rotate cut resolution", default=4, min=1, description="Valor para designar la resolucion del corte rotatorio")
+
     
 class BUTTOM_SET_AREA(bpy.types.Operator):
     bl_label = "BUTTOM_SET_AREA"
@@ -3567,7 +3593,9 @@ class BUTTOM_CUT_SILH_COMPLETE(bpy.types.Operator):
         global func
         if func is None:
             func = funcs()
-        func.picar()
+
+        resolution = context.scene.my_number_settings.rotate_cut_resolution
+        func.rotate_cut(resolution)
         #func.cut_and_group_parts(context)
 
         print("execute BUTTOM_CUT_SILH_COMPLETE custom ok!")
@@ -3922,6 +3950,9 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
                     row02 = layout.row()
                     row02.label(text = "FINISH Step")
                     
+                    row02 = layout.row()
+                    row02.prop(context.scene.my_number_settings, "rotate_cut_resolution", text="Resolucion")    
+
                     # add button custom
                     row02 = layout.row()
                     row02.scale_y = 1
