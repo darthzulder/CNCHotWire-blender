@@ -1088,70 +1088,140 @@ class funcs():
         else:
             f.write(f'({file_name_number})\n(GCODE_from_Blender)\nM9\nG21\nG90\nF600\nM3\n')
         
-        #direction will be from +X  to -X
-        x_first = verts[0]['x']
+        if isinstance(rotation_z_degrees, list):
+            vertxs = verts
+            custom_range_verts = range(0,len(verts)) 
+            for j in custom_range_verts:
+                #direction will be from +X  to -X
+                x_first = verts[j][0]['x']
 
-        custom_range = range(0,len(verts))         
+                custom_range = range(0,len(verts[j]))         
 
-        for i in custom_range:
-            x=round((x_first - verts[i]['x']) * scale,2)
-            if order == 1:
-                x += 2150
-            print(f"x = round((x_first - verts[i]['x']) * scale,2)")
-            print(f"{x} = round(({x_first} - {verts[i]['x']}) * {scale},2)")
-            y=round(verts[i]['y'] * scale,2)
+                for i in custom_range:
+                    x=round((x_first - verts[j][i]['x']) * scale,2)
+                    if order == 1:
+                        x += 2150
+                    #print(f"x = round((x_first - verts[i]['x']) * scale,2)")
+                    #print(f"{x} = round(({x_first} - {verts[i]['x']}) * {scale},2)")
+                    y=round(verts[j][i]['y'] * scale,2)
 
-            if verts[i]['z'] > 0 and wood == False:
-                z=round((verts[i]['z'] - verts[0]['z']) * scale,2)
-                #print(f"more than 0 ({verts[i]['z']} - {verts[0]['z']} = {z})")
-            else:
-                z=round(verts[i]['z'] * scale,2)
-                #print(f"less than 0 ({verts[i]['z']}) = {z}")
+                    if verts[j][i]['z'] > 0 and wood == False:
+                        z=round((verts[j][i]['z'] - verts[j][0]['z']) * scale,2)
+                        #print(f"more than 0 ({verts[i]['z']} - {verts[0]['z']} = {z})")
+                    else:
+                        z=round(verts[j][i]['z'] * scale,2)
+                        #print(f"less than 0 ({verts[i]['z']}) = {z}")
 
-            coorX=str('%.4f' % x)
-            coorY=str('%.4f' % y)
-            coorZ=str('%.4f' % z)
+                    coorX=str('%.4f' % x)
+                    coorY=str('%.4f' % y)
+                    coorZ=str('%.4f' % z)
 
-            #write in .nc file
-            #if 0 < x <= 2150:
-            f.write(f'G01X{coorX}Y{coorZ}A{rotation_z_degrees}\n') 
-            #---------------write creasees if is a wood cut-------------------------
-            if i+1 < len(verts) and i > 0 and wood != False:
-                crease_width = 2
-                creases_up = ''
-                creases_down = ''
-                actual_vert_z = round(verts[i]['z'], 2)
-                next_vert_z   = round(verts[i+1]['z'], 2)
-                #print(f'Vertex Z{i} : {actual_vert_z} == {next_vert_z} ?')
-                if  actual_vert_z == next_vert_z:
-                    width_wood=(round(verts[2]['x'],4) - round(verts[3]['x'],4))*scale
-                    crease_step=width_wood/4 #for 3 creases
-                    #print(f'vertex distance {i}:{verts[i].co.x} - {verts[i+1].co.x} = {width_wood}')
-                    for j in range(1,4):
-                        #direction logic
-                        if round(verts[i]['x'],2) > round(verts[i+1]['x'],2):
-                            creases_top = coorZ
-                            #verif if is on floor
-                            if(float(coorZ)<=0):
-                                creases_bottom = 0
-                            else:
-                                creases_bottom = "%.4f" % (z+crease_width)
-                            creases_up =  (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{creases_top}A{rotation_z_degrees}\n')
-                            creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees}\n')
-                            creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees}\n')
-                            creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{creases_top}A{rotation_z_degrees}\n')
-                            f.write(creases_up)
-                        elif round(verts[i]['x'],2) < round(verts[i+1]['x'],2):
-                            creases_top = coorZ
-                            if(float(coorZ)<=0):
-                                creases_bottom = 0
-                            else:
-                                creases_bottom = "%.4f" % (z-crease_width)
-                            creases_down =  (f'G01X{str("%.4f" % (x+(-j*crease_step+crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
-                            creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step+crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees}\n')
-                            creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step-crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees}\n')
-                            creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step-crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
-                            f.write(creases_down)
+                    #write in .nc file
+                    #if 0 < x <= 2150:
+                    f.write(f'G01X{coorX}Y{coorZ}A{rotation_z_degrees[j]}\n') 
+                    #---------------write creasees if is a wood cut-------------------------
+                    if i+1 < len(verts[j]) and i > 0 and wood != False:
+                        crease_width = 2
+                        creases_up = ''
+                        creases_down = ''
+                        actual_vert_z = round(verts[j][i]['z'], 2)
+                        next_vert_z   = round(verts[j][i+1]['z'], 2)
+                        #print(f'Vertex Z{i} : {actual_vert_z} == {next_vert_z} ?')
+                        if  actual_vert_z == next_vert_z:
+                            width_wood=(round(verts[j][2]['x'],4) - round(verts[j][3]['x'],4))*scale
+                            crease_step=width_wood/4 #for 3 creases
+                            #print(f'vertex distance {i}:{verts[i].co.x} - {verts[i+1].co.x} = {width_wood}')
+                            for j in range(1,4):
+                                #direction logic
+                                if round(verts[j][i]['x'],2) > round(verts[j][i+1]['x'],2):
+                                    creases_top = coorZ
+                                    #verif if is on floor
+                                    if(float(coorZ)<=0):
+                                        creases_bottom = 0
+                                    else:
+                                        creases_bottom = "%.4f" % (z+crease_width)
+                                    creases_up =  (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{creases_top}A{rotation_z_degrees[j]}\n')
+                                    creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees[j]}\n')
+                                    creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees[j]}\n')
+                                    creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{creases_top}A{rotation_z_degrees[j]}\n')
+                                    f.write(creases_up)
+                                elif round(verts[j][i]['x'],2) < round(verts[j][i+1]['x'],2):
+                                    creases_top = coorZ
+                                    if(float(coorZ)<=0):
+                                        creases_bottom = 0
+                                    else:
+                                        creases_bottom = "%.4f" % (z-crease_width)
+                                    creases_down =  (f'G01X{str("%.4f" % (x+(-j*crease_step+crease_width/2)))}Y{coorZ}A{rotation_z_degrees[j]}\n')
+                                    creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step+crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees[j]}\n')
+                                    creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step-crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees[j]}\n')
+                                    creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step-crease_width/2)))}Y{coorZ}A{rotation_z_degrees[j]}\n')
+                                    f.write(creases_down)
+                order *= -1
+        else:
+            #direction will be from +X  to -X
+                x_first = verts[0]['x']
+
+                custom_range = range(0,len(verts))         
+
+                for i in custom_range:
+                    x=round((x_first - verts[i]['x']) * scale,2)
+                    if order == 1:
+                        x += 2150
+                    #print(f"x = round((x_first - verts[i]['x']) * scale,2)")
+                    #print(f"{x} = round(({x_first} - {verts[i]['x']}) * {scale},2)")
+                    y=round(verts[i]['y'] * scale,2)
+
+                    if verts[i]['z'] > 0 and wood == False:
+                        z=round((verts[i]['z'] - verts[0]['z']) * scale,2)
+                        #print(f"more than 0 ({verts[i]['z']} - {verts[0]['z']} = {z})")
+                    else:
+                        z=round(verts[i]['z'] * scale,2)
+                        #print(f"less than 0 ({verts[i]['z']}) = {z}")
+
+                    coorX=str('%.4f' % x)
+                    coorY=str('%.4f' % y)
+                    coorZ=str('%.4f' % z)
+
+                    #write in .nc file
+                    #if 0 < x <= 2150:
+                    f.write(f'G01X{coorX}Y{coorZ}A{rotation_z_degrees}\n') 
+                    #---------------write creasees if is a wood cut-------------------------
+                    if i+1 < len(verts) and i > 0 and wood != False:
+                        crease_width = 2
+                        creases_up = ''
+                        creases_down = ''
+                        actual_vert_z = round(verts[i]['z'], 2)
+                        next_vert_z   = round(verts[i+1]['z'], 2)
+                        #print(f'Vertex Z{i} : {actual_vert_z} == {next_vert_z} ?')
+                        if  actual_vert_z == next_vert_z:
+                            width_wood=(round(verts[2]['x'],4) - round(verts[3]['x'],4))*scale
+                            crease_step=width_wood/4 #for 3 creases
+                            #print(f'vertex distance {i}:{verts[i].co.x} - {verts[i+1].co.x} = {width_wood}')
+                            for j in range(1,4):
+                                #direction logic
+                                if round(verts[i]['x'],2) > round(verts[i+1]['x'],2):
+                                    creases_top = coorZ
+                                    #verif if is on floor
+                                    if(float(coorZ)<=0):
+                                        creases_bottom = 0
+                                    else:
+                                        creases_bottom = "%.4f" % (z+crease_width)
+                                    creases_up =  (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{creases_top}A{rotation_z_degrees}\n')
+                                    creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step+crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees}\n')
+                                    creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees}\n')
+                                    creases_up += (f'G01X{str("%.4f" % (x-(-j*crease_step-crease_width/2)))}Y{creases_top}A{rotation_z_degrees}\n')
+                                    f.write(creases_up)
+                                elif round(verts[i]['x'],2) < round(verts[i+1]['x'],2):
+                                    creases_top = coorZ
+                                    if(float(coorZ)<=0):
+                                        creases_bottom = 0
+                                    else:
+                                        creases_bottom = "%.4f" % (z-crease_width)
+                                    creases_down =  (f'G01X{str("%.4f" % (x+(-j*crease_step+crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
+                                    creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step+crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees}\n')
+                                    creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step-crease_width/2)))}Y{creases_bottom}A{rotation_z_degrees}\n')
+                                    creases_down += (f'G01X{str("%.4f" % (x+(-j*crease_step-crease_width/2)))}Y{coorZ}A{rotation_z_degrees}\n')
+                                    f.write(creases_down)
 
         if rotative_cut == False:
             if x != 0 :    
@@ -2850,6 +2920,8 @@ class funcs():
         obj = bpy.context.active_object
         collection_name = obj.users_collection[0].name
         order = -1  # 1 para comenzar desde la izquierda, -1 para la derecha
+        complete_cuts_vertex = []
+        complete_cuts_rotations = []
         for i in range(detail_level):
             obj_silhuette = self.create_silhouette_fast(obj)
             
@@ -2860,7 +2932,9 @@ class funcs():
             #----create GCODE file
             vertex_coordinates = [{'x':v[0], 'y':v[1], 'z':v[2]} for v in verts ]
             print (f"VERTICES A FILE: {vertex_coordinates}")
-            self.write_to_file(vertex_coordinates,-1 * math.degrees(obj.rotation_euler.z),collection_name,rotative_cut=True, order = order)
+            complete_cuts_vertex += [vertex_coordinates]
+            complete_cuts_rotations += [-1 * math.degrees(obj.rotation_euler.z)]
+            #self.write_to_file(vertex_coordinates,-1 * math.degrees(obj.rotation_euler.z),collection_name,rotative_cut=True, order = order)
 
             obj.rotation_euler.z += math.radians(rotation)
             print(f"COMPARACION {round(math.degrees(obj.rotation_euler.z), 2)} >= {180.0} ")
@@ -2874,6 +2948,8 @@ class funcs():
             
             print(f"rotation: {rotation} ; i {i} ; grado estado: {round(math.degrees(obj.rotation_euler.z),2)}")
             order *= -1
+
+        self.write_to_file(complete_cuts_vertex, complete_cuts_rotations, collection_name, rotative_cut=True, order = order)
 
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
