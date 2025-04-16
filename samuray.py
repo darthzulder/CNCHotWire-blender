@@ -1088,8 +1088,23 @@ class funcs():
         else:
             f.write(f'({file_name_number})\n(GCODE_from_Blender)\nM9\nG21\nG90\nF600\nM3\n')
         
+        #If the rotation_z_degrees is a list check every list of vertexs
         if isinstance(rotation_z_degrees, list):
-            vertxs = verts
+            
+            obj_actual = bpy.context.active_object
+            #print(f"OBJETO SELECCIONADO PARA PICAR {obj_actual.name}")
+            area_cnc_obj = next((obj for obj in obj_actual.users_collection[0].objects if obj.name.startswith("areaCNC.")), None)
+            
+            f.write(f'(COMPLETO {collection_name}-{obj_actual.users_collection[0].name})\n')
+            
+            if area_cnc_obj:
+                areaCNC_z = area_cnc_obj.location.z
+                #print(f"Coordenada Z del objeto 'areaCNC.': {areaCNC_z}")                
+                actual_z = (obj_actual.location.z - areaCNC_z)*1000
+                #print(f"**************---*-*-*-*Coordenada Z del objeto seleccionado: {actual_z}")
+            else:
+                print("No se encontró ningún objeto que comience con 'areaCNC.' en la colección del objeto seleccionado.")
+
             custom_range_verts = range(0,len(verts)) 
             for j in custom_range_verts:
                 #direction will be from +X  to -X
@@ -1113,12 +1128,12 @@ class funcs():
                         #print(f"less than 0 ({verts[i]['z']}) = {z}")
 
                     coorX=str('%.4f' % x)
-                    coorY=str('%.4f' % y)
-                    coorZ=str('%.4f' % z)
+                    coorY=str('%.4f' % y)                    
+                    coorZ=str('%.4f' % (z + actual_z))
 
                     #write in .nc file
                     #if 0 < x <= 2150:
-                    f.write(f'G01X{coorX}Y{coorZ}A{rotation_z_degrees[j]}\n') 
+                    -----------------------------------------------f.write(f'G01X{coorX}Y{coorZ}A{rotation_z_degrees[j]}\n') 
                     #---------------write creasees if is a wood cut-------------------------
                     if i+1 < len(verts[j]) and i > 0 and wood != False:
                         crease_width = 2
@@ -2913,11 +2928,11 @@ class funcs():
         
         return new_verts
 
-    def rotate_cut(self,detail_level_input):
+    def rotate_cut(self,context, detail_level_input):
         print("PICANDO")
         detail_level = detail_level_input
         rotation = 180/detail_level        
-        obj = bpy.context.active_object
+        obj = context.active_object
         collection_name = obj.users_collection[0].name
         order = -1  # 1 para comenzar desde la izquierda, -1 para la derecha
         complete_cuts_vertex = []
@@ -2951,6 +2966,69 @@ class funcs():
 
         self.write_to_file(complete_cuts_vertex, complete_cuts_rotations, collection_name, rotative_cut=True, order = order)
 
+    def listar_colecciones_y_objetos_irreg(self, coleccion_actual):
+        """
+        Lista las colecciones y objetos que comienzan con 'irregObjPart' dentro de la colección actual.
+        
+        Args:
+            coleccion_actual (bpy.types.Collection): La colección a analizar
+            
+        Returns:
+            dict: Diccionario con las colecciones y sus objetos irregulares correspondientes
+        """
+        resultado = {}
+        
+        # Recorrer las colecciones hijas
+        for coleccion in coleccion_actual.children:
+            objetos_irreg = []
+            
+            # Buscar objetos que comienzan con 'irregObjPart' en esta colección
+            for obj in coleccion.objects:
+                if obj.name.startswith("irregObjPart"):
+                    objetos_irreg.append(obj.name)
+                    
+            # Agregar al diccionario solo si hay objetos irregulares
+            if objetos_irreg:
+                resultado[coleccion.name] = objetos_irreg
+                
+        return resultado
+    
+    def group_rotate_cut(self,context):
+        # Obtener la colección activa
+        obj_base = context.active_object
+        coleccion_actual = obj_base.users_collection[0]
+        location_obj_base = obj_base.location.copy()
+        # Obtener el resultado
+        resultado = self.listar_colecciones_y_objetos_irreg(coleccion_actual)
+        
+        # Imprimir resultados
+        print(f"\nColección actual: {coleccion_actual.name}")
+        print("-" * 40)
+        
+        if not resultado:
+            print("No se encontraron colecciones con objetos irregulares.")
+            return
+            
+        for coleccion, objetos in resultado.items():
+            print(f"\nColección: {coleccion}")
+            
+            print("Objetos irregulares:")
+            for obj in objetos:
+                print(f"  - {obj}")
+                
+                rotation_obj = bpy.data.objects[obj].rotation_euler.copy()
+                location_obj = bpy.data.objects[obj].location.copy()
+
+                bpy.data.objects[obj].rotation_euler = (0, 0, 0)
+                bpy.data.objects[obj].location = location_obj_base
+                # Hacer que el objeto 'obj' sea el objeto activo y seleccionado
+                context.view_layer.objects.active = bpy.data.objects[obj]
+                bpy.data.objects[obj].select_set(True)
+                self.rotate_cut(context, 10)
+
+                bpy.data.objects[obj].rotation_euler = rotation_obj
+                bpy.data.objects[obj].location = location_obj
+        
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
 
@@ -3572,7 +3650,7 @@ class RotateViewLeft(bpy.types.Operator):
         if func is None:
             func = funcs()
         # Rotar alrededor del eje Z (global) hacia la izquierda
-        func.rotate_view(context, (0, 0, 1), 1)
+        func.rotate_view(context, (0, 0, 0.1), 1)
         return {'FINISHED'}
 
 class RotateViewRight(bpy.types.Operator):
@@ -3584,7 +3662,7 @@ class RotateViewRight(bpy.types.Operator):
         if func is None:
             func = funcs()
         # Rotar alrededor del eje Z (global) hacia la derecha
-        func.rotate_view(context, (0, 0, 1), -1)
+        func.rotate_view(context, (0, 0, 0.1), -1)
         return {'FINISHED'}
 
 class RotateViewUp(bpy.types.Operator):
@@ -3600,7 +3678,7 @@ class RotateViewUp(bpy.types.Operator):
 
         # Rotar alrededor del eje "derecho" de la vista (x-axis de la vista) hacia arriba
         region_3d = context.space_data.region_3d
-        right_axis = region_3d.view_rotation @ mathutils.Vector((1, 0, 0))
+        right_axis = region_3d.view_rotation @ mathutils.Vector((0.1, 0, 0))
         func.rotate_view(context, right_axis, 1)
         return {'FINISHED'}
 
@@ -3614,7 +3692,7 @@ class RotateViewDown(bpy.types.Operator):
             func = funcs()
         # Rotar alrededor del eje "derecho" de la vista (x-axis de la vista) hacia abajo
         region_3d = context.space_data.region_3d
-        right_axis = region_3d.view_rotation @ mathutils.Vector((1, 0, 0))
+        right_axis = region_3d.view_rotation @ mathutils.Vector((0.1, 0, 0))
         func.rotate_view(context, right_axis, -1)
         return {'FINISHED'}
 
@@ -3671,15 +3749,15 @@ class BUTTOM_CUT_SILH_COMPLETE(bpy.types.Operator):
             func = funcs()
 
         resolution = context.scene.my_number_settings.rotate_cut_resolution
-        func.rotate_cut(resolution)
-        #func.cut_and_group_parts(context)
+        #func.rotate_cut(resolution)
+        func.group_rotate_cut(context)
 
         print("execute BUTTOM_CUT_SILH_COMPLETE custom ok!")
 
         return {'FINISHED'}
     @classmethod
     def description(cls, context, properties):
-        return "object.button_custom14"
+        return "object.button_cut_silh_complete"
 # PANEL UI (PART 1 DRAW)
 ####################################################
 
@@ -3981,7 +4059,7 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
 
                     
                     row02.scale_y = 1
-                    row02.operator("object.button_custom0705", text= "EXRA CUT")
+                    row02.operator("object.button_custom0705", text= "EXTRA CUT")
                     # add button custom 
                     row02.scale_y = 2
                     row02.operator("object.button_custom08", text= "Next Part", icon = "FORWARD")
@@ -4051,7 +4129,7 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
             # add button custom
             row02 = layout.row()
             row02.scale_y = 2
-            row02.operator("object.button_custom14", text= "Cut")
+            row02.operator("object.button_custom14", text= "- Cut -")
 
         layout.label(text="VISTA DE LA CAMARA")
         layout.prop(context.scene, "view_rotation_sensitivity", text="")
@@ -4168,8 +4246,8 @@ def register():
     bpy.types.Scene.view_rotation_sensitivity = bpy.props.FloatProperty(
         name="Sensitivity",
         description="Adjust view rotation sensitivity (degrees)",
-        default=15.0,
-        min=1.0,
+        default=0.1,
+        min=0.1,
         max=90.0,
         update=update_sensitivity
     )
