@@ -776,11 +776,17 @@ class funcs():
             if (n_blocks_z-1) * foam_size_Z <= object_irregular_obj.location.z:
                 self.list_top_objects.append(object_irregular_obj.name)
                 bpy.data.objects[object_irregular]['Top'] = True
+                #----create STL file of irregular object
+                collection_name = object_irregular_obj.users_collection[0].name                
+                collection_folder_name = collection_name + "_TOP"
+                self.export_to_stl_origin(context,collection_name,collection_name,"irregObjPart.", collection_folder_name)
+            else:
+                #----create STL file of irregular object                
+                collection_name = object_irregular_obj.users_collection[0].name 
+                self.export_to_stl_origin(context,collection_name,collection_name,"irregObjPart.")
 
                 #print(f"Elemento Top {n_blocks_z}-- bloquesZ {(n_blocks_z-1) * foam_size_Z} objZ--> {object_irregular_obj.location.z} obj--> {object_irregular_obj}")
-            #----create STL file of irregular object
-            collection_name = object_irregular_obj.users_collection[0].name
-            self.export_to_stl_origin(context,collection_name,collection_name,"irregObjPart.")
+            
         print(f'---------Volumen Total del irregular = {volumen_total_irregular_obj}')
         print(f'---------Volumen Total del cubes = {volumen_total_cube_obj}')
         bpy.context.scene["my_top_object_list"] = self.list_top_objects
@@ -1250,12 +1256,12 @@ class funcs():
         scale=1000
         i=0
         blend_file_path = self.get_path()
-        pathFileName=blend_file_path + "\\PARTES\\"+collection_name+"\\"+collection_name+"."
+        pathFileName=blend_file_path + "\\PARTES\\"+collection_name+"_TOP"+"\\"+collection_name+"."
             
         pathFileNumber=pathFileName+'%03d' % i +"_TOP_samurai.nc"
         #create .nc file 
         try:
-            os.makedirs(blend_file_path + "\\PARTES\\"+collection_name, exist_ok=True)
+            os.makedirs(blend_file_path + "\\PARTES\\"+collection_name+"_TOP", exist_ok=True)
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
@@ -1824,7 +1830,7 @@ class funcs():
 
         self.export_to_stl_origin(context,collection_name,collection_name+'_raw',"foamBlock.")
 
-    def export_to_stl_origin(self,context,collection_name,stl_name,obj_name_base):
+    def export_to_stl_origin(self,context,collection_name,stl_name,obj_name_base, collection_folder_name = None):
 
         scale_for_powermill=1000
         foam_x = context.scene.my_number_settings.my_number_property_foam_block_x
@@ -1832,12 +1838,14 @@ class funcs():
         foam_z = context.scene.my_number_settings.my_number_property_foam_block_z
         blend_file_path = self.get_path()
 
+        if collection_folder_name == None:
+            collection_folder_name = collection_name
         try:
-            os.makedirs(blend_file_path + "\\PARTES\\"+collection_name, exist_ok=True)  
+            os.makedirs(blend_file_path + "\\PARTES\\"+collection_folder_name, exist_ok=True)  
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
-        output_path=blend_file_path + "\\PARTES\\"+collection_name+"\\"+stl_name+".stl"
+        output_path=blend_file_path + "\\PARTES\\"+collection_folder_name+"\\"+stl_name+".stl"
         #get foamBlock object
         objective_object = [obj for obj in bpy.data.objects if obj.name.startswith(obj_name_base) and collection_name in obj.users_collection[0].name]
         
@@ -2103,11 +2111,48 @@ class funcs():
 
         self.block_base_top_part(context)
         self.isolate_part_collection(context)
+
+        obj_base = context.active_object
+        coleccion_actual = obj_base.users_collection[0]
+        collections = self.listar_colecciones_y_objetos_irreg(coleccion_actual)
+        blend_file_path = self.get_path()
+        # Imprimir resultados
+        print(f"\nColección actual: {coleccion_actual.name}")
+        print("-" * 40)
+        
+        if not collections:
+            print("No se encontraron colecciones con objetos irregulares en FINISH.")
+            return
+            
+        for coleccion, objetos in collections.items():
+            print(f"\nColección: {coleccion}")
+            path_destiny = blend_file_path + "\\PARTES\\" + coleccion_actual.name + "_TOP"
+            print("Objetos irregulares:")
+            for obj in objetos:
+                print(f"  - {obj}")
+                
+                if bpy.data.objects[obj]['Top'] == True:
+                                
+                    path_file = blend_file_path + "\\PARTES\\" + coleccion + "_TOP"
+                    self.move_file_directory(path_file, path_destiny)
+
+
         context.active_object['finish']=True
         context.active_object.users_collection[0].hide_viewport = True
 
         
         # Hide Current Collection
+
+    def move_file_directory(self, path_file, path_destiny):
+      
+        print(f"origen {path_file}")
+        print(f"destino {path_destiny}")
+
+        try:
+            os.rename(path_file, os.path.join(path_destiny, os.path.basename(path_file)))
+            print(f"El directorio {path_file} ha sido movido a {path_destiny}")
+        except Exception as e:
+            print(f"Error al mover el directorio: {e}")
 
     def isolate_part_collection(self, context):
 
@@ -2948,7 +2993,7 @@ class funcs():
             vertex_coordinates = [{'x':v[0], 'y':v[1], 'z':v[2]} for v in verts ]
             print (f"VERTICES A FILE: {vertex_coordinates}")
             complete_cuts_vertex += [vertex_coordinates]
-            complete_cuts_rotations += [-1 * math.degrees(obj.rotation_euler.z)]
+            complete_cuts_rotations += [round(-1 * math.degrees(obj.rotation_euler.z),2)]
             #self.write_to_file(vertex_coordinates,-1 * math.degrees(obj.rotation_euler.z),collection_name,rotative_cut=True, order = order)
 
             obj.rotation_euler.z += math.radians(rotation)
@@ -2963,7 +3008,8 @@ class funcs():
             
             print(f"rotation: {rotation} ; i {i} ; grado estado: {round(math.degrees(obj.rotation_euler.z),2)}")
             order *= -1
-
+        if obj["Top"]:
+            collection_name += "_TOP"
         self.write_to_file(complete_cuts_vertex, complete_cuts_rotations, collection_name, rotative_cut=True, order = order)
 
     def listar_colecciones_y_objetos_irreg(self, coleccion_actual):
@@ -3028,6 +3074,10 @@ class funcs():
 
                 bpy.data.objects[obj].rotation_euler = rotation_obj
                 bpy.data.objects[obj].location = location_obj
+
+        context.view_layer.objects.active = obj_base
+        obj_base.select_set(True)
+        self.rotate_cut(context, 10)
         
 # BUTTON CUSTOM (OPERATOR)
 ####################################################
@@ -3465,6 +3515,7 @@ class BUTTOM_CUSTOM0605(bpy.types.Operator):
         global func
         if func is None:
             func = funcs()
+        func.group_rotate_cut(context) #CUT BEFORE FINISH
         func.block_base_top_part_finish(context)
 
         print("execute button0605 custom ok!")
@@ -3697,7 +3748,7 @@ class RotateViewDown(bpy.types.Operator):
         return {'FINISHED'}
 
 class OBJECT_OT_check_plane_cut(bpy.types.Operator):
-    """Comprueba si el objeto 'Plane' corta alguno de los objetos en la colección 'P.130'"""
+    """Comprueba si el objeto 'Plane' corta alguno de los objetos en la colección """
     bl_idname = "object.check_plane_cut"
     bl_label = "Verificar corte del plano"
 
@@ -3717,7 +3768,7 @@ class OBJECT_OT_check_plane_cut(bpy.types.Operator):
         actual_collection = context.active_object.users_collection[0].name
         collection = bpy.data.collections.get(actual_collection)
         if not collection:
-            self.report({'ERROR'}, "No se encontró la colección 'P.130'")
+            self.report({'ERROR'}, "No se encontró la colección")
             return {'CANCELLED'}
 
         # Lista para acumular los nombres de objetos que son cortados por el plano
@@ -4104,13 +4155,13 @@ class PANEL_CUSTOM_UI_03(bpy.types.Panel):
                     row02 = layout.row()
                     row02.label(text = "FINISH Step")
                     
-                    row02 = layout.row()
+                    '''row02 = layout.row()
                     row02.prop(context.scene.my_number_settings, "rotate_cut_resolution", text="Resolucion")    
 
                     # add button custom
                     row02 = layout.row()
                     row02.scale_y = 1
-                    row02.operator("object.buttom_cut_silh_complete", text= "PICADO ROTATIVO")
+                    row02.operator("object.buttom_cut_silh_complete", text= "PICADO ROTATIVO")'''
 
                     # add button custom
                     row02 = layout.row()
